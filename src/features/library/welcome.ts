@@ -8,7 +8,7 @@ AO Writer is a quiet place to write. Start typing anywhere on this page. The too
 
 ## Try the writing modes
 
-Press **Cmd+D** (Ctrl+D elsewhere) for *focus mode*. Everything except the sentence you are writing fades out. The same toggle lives in the status bar below. Switch between sentence and paragraph focus in the options menu, and turn on typewriter mode to keep your line in the middle of the screen.
+Press **Cmd+D** (Ctrl+D elsewhere) for *focus mode*. Everything except the sentence you are writing fades out. The same toggle lives in the status bar below. Focus also keeps your line in the middle of the screen. Switch between sentence, paragraph and typewriter focus in the options menu; typewriter scrolling is also available on its own.
 
 Press **Cmd+Shift+D** to show the syntax: nouns, verbs, adjectives, adverbs and conjunctions each get their own soft colour. It is a good way to see how a sentence is built, and to spot a paragraph that is all adjectives.
 

@@ -119,17 +119,30 @@ the last keystroke (and when the tab hides).
 
 ## Focus and typewriter
 
-Focus mode finds the current sentence with the browser's `Intl.Segmenter` (ICU sentence rules, for the browser's
-language), applied to the caret's paragraph only. ICU keeps `3.14`, `e.g. the` and `U.S. now` inside a sentence, but it
-has no abbreviation list: a title or initial followed by a capital (`Dr. Smith`, `z. B.`) ends the sentence. Paragraph
-scope is the block between blank lines, with each list item, heading and quote line as its own block. Dimmed text
-switches at once, with no fade.
+Focus mode works like iA Writer's. It has three scopes in the options menu: **Sentence**, **Paragraph** and **Typewriter**
+(centring only, nothing dimmed). Turning focus on also turns typewriter scrolling on and centres the caret line at once;
+turning focus off gives back whatever typewriter setting you had (the setting itself is never changed: the editor reads
+`typewriter || focus`). While focus is on, the "Typewriter scrolling" box shows as checked and fixed.
 
-Typewriter mode re-centres the caret line on every selection change, with a 150 ms ease-out glide on the scroll
+Everything outside the scope is one flat tone: the text colour mixed 38% (dark) or 42% (light) into the page colour with
+`color-mix` in OKLab. There is no opacity, so nothing blends, and the tone replaces every inner colour: Markdown marks,
+headings, links, part-of-speech colours, Shiki code colours and style-check underlines. Weights and italics stay. Dimmed
+text switches at once, with no fade. In dark mode that is about rgb(89, 94, 103) on rgb(23, 28, 37), a 2.6:1 contrast, as
+iA's rgb(92, 92, 92) on rgb(25, 25, 25).
+
+The sentence is found with the browser's `Intl.Segmenter` (ICU sentence rules, for the browser's language), applied to
+the caret's paragraph only. ICU keeps `3.14`, `e.g. the` and `U.S. now` inside a sentence, and a full stop followed by a
+lowercase word does not end one, but it has no abbreviation list: a title or initial followed by a capital (`Dr. Smith`,
+`z. B.`) ends the sentence. Paragraph scope is the block between blank lines, with each list item, heading and quote
+line as its own block.
+
+Typewriter scrolling re-centres the caret line on every selection change, with a 150 ms ease-out glide on the scroll
 position (a jump when the system asks for reduced motion). A caret line already within 3% of the window height from
 the middle stays put. Keys and Vim motions scroll immediately; a mouse click or drag waits 150 ms after the button
 comes up. The page has half a window of padding above and below, so the first and last line can be centred.
-Without typewriter mode the page only scrolls when the caret comes within 96 px of an edge.
+Without typewriter scrolling the page only scrolls when the caret comes within 96 px of an edge.
+
+![Focus mode, dark](docs/screenshots/17-focus-dark.png)
 
 ## How it works
 

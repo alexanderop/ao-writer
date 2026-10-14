@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { cn } from 'cn'
 
 import { settingsAtom } from '../features/settings/atoms.ts'
-import { FONT_SIZE, resizedFont } from '../features/settings/settings.ts'
+import { FONT_SIZE, resizedFont, typewriterActive } from '../features/settings/settings.ts'
 import type { Settings } from '../features/settings/settings.ts'
 import { Button } from '#/shared/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '#/shared/ui/popover'
@@ -74,14 +74,15 @@ function Segmented<T extends string>({ label, value, options, onChange }: Segmen
 interface CheckRowProps {
   readonly row: BooleanKey
   readonly settings: Settings
+  readonly checked?: boolean
   readonly disabled?: boolean
   readonly onToggle: (key: BooleanKey['key']) => void
 }
 
-function CheckRow({ row, settings, disabled = false, onToggle }: CheckRowProps) {
+function CheckRow({ row, settings, checked = settings[row.key], disabled = false, onToggle }: CheckRowProps) {
   return (
     <label className={cn('flex cursor-pointer items-center gap-2 text-sm', disabled && 'opacity-50')}>
-      <input type="checkbox" className="size-3.5 accent-[var(--accent)]" checked={settings[row.key]} disabled={disabled} onChange={() => onToggle(row.key)} data-testid={`option-${row.key}`} />
+      <input type="checkbox" className="size-3.5 accent-[var(--accent)]" checked={checked} disabled={disabled} onChange={() => onToggle(row.key)} data-testid={`option-${row.key}`} />
       {row.swatch ? <span className={cn('size-2 rounded-full', row.swatch)} /> : null}
       {row.label}
     </label>
@@ -109,10 +110,12 @@ export function OptionsMenu() {
             options={[
               { value: 'sentence', label: 'Sentence' },
               { value: 'paragraph', label: 'Paragraph' },
+              { value: 'typewriter', label: 'Typewriter' },
             ]}
             onChange={(focusScope) => patch({ focusScope, focus: true })}
           />
-          <CheckRow row={{ key: 'typewriter', label: 'Typewriter mode' }} settings={settings} onToggle={toggle} />
+          {/* focus mode centres the line itself; the box shows that, and keeps the writer's own choice for when focus ends */}
+          <CheckRow row={{ key: 'typewriter', label: 'Typewriter scrolling' }} settings={settings} checked={typewriterActive(settings)} disabled={settings.focus} onToggle={toggle} />
         </Section>
         <Section title="Keys">
           <CheckRow row={{ key: 'vim', label: 'Vim keybindings' }} settings={settings} onToggle={toggle} />

@@ -1,6 +1,7 @@
 import { Effect, Schema } from 'effect'
 
 import type { StyleOptions, SyntaxOptions } from '../../core/editor/annotate.ts'
+import type { FocusScope } from '../../core/text/focus.ts'
 
 /** The serif-free typefaces iA released under the OFL. */
 const TYPEFACES = ['duo', 'mono', 'quattro'] as const
@@ -17,7 +18,8 @@ export const Settings = Schema.Struct({
   counter: Schema.Literals(COUNTER_MODES),
   lastDocument: Schema.NullOr(Schema.String),
   focus: Schema.Boolean,
-  focusScope: Schema.Literals(['sentence', 'paragraph']),
+  // the Typewriter scope keeps focus on without dimming anything, as in iA Writer
+  focusScope: Schema.Literals(['sentence', 'paragraph', 'typewriter']),
   typewriter: Schema.Boolean,
   // settings saved before Vim keys existed have no such key; they read as off
   vim: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
@@ -82,6 +84,16 @@ export function nextCounter(current: Settings['counter']): Settings['counter'] {
   const index = COUNTER_MODES.indexOf(current)
 
   return COUNTER_MODES[(index + 1) % COUNTER_MODES.length] ?? 'words'
+}
+
+/** Whether the caret line is kept in the middle: the typewriter setting, or focus mode, which always centres and gives the setting back when it ends. */
+export function typewriterActive(settings: Settings): boolean {
+  return settings.typewriter || settings.focus
+}
+
+/** What focus mode dims around the caret, or null when nothing is dimmed: focus is off, or its scope is Typewriter. */
+export function dimScope(settings: Settings): FocusScope | null {
+  return settings.focus && settings.focusScope !== 'typewriter' ? settings.focusScope : null
 }
 
 /** The syntax layer for the editor, or null when it is off. */

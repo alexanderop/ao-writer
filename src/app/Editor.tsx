@@ -11,6 +11,7 @@ import { cursorOf } from '../core/vim/vim.ts'
 import { caretAtom, segmentsAtom, selectionAtom, textAtom, typingAtom, vimAtom } from '../features/editor/atoms.ts'
 import { activeIdAtom, autosaveAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
+import { typewriterActive } from '../features/settings/settings.ts'
 import { applyEdit, editorInputAtom } from './editor-input.ts'
 import { useCaretScroll } from './useCaretScroll.ts'
 import { runVimKey } from './vim-input.ts'
@@ -196,8 +197,10 @@ export function Editor() {
     }
   }, [activeId, settings.vim, commitVim, setSelection])
 
-  // keep the caret in view; typewriter mode keeps it in the middle
-  useCaretScroll(scrollRef, inputRef, markerRef, highlightRef, settings.typewriter, segments)
+  // keep the caret in view; typewriter mode, and focus mode with it, keeps it in the middle
+  const typewriter = typewriterActive(settings)
+
+  useCaretScroll(scrollRef, inputRef, markerRef, highlightRef, typewriter, segments)
 
   // linewise visual mode paints its own band of full-width rows behind the text; it follows the layer's wrapping
   const measureBand = useCallback((): void => {
@@ -291,7 +294,7 @@ export function Editor() {
 
   return (
     <div ref={scrollRef} className="editor-scroll h-full overflow-y-auto" data-testid="editor-scroll" onMouseDown={onPageMouseDown}>
-      <div className="editor-column" data-typewriter={settings.typewriter} data-testid="editor-column">
+      <div className="editor-column" data-typewriter={typewriter} data-testid="editor-column">
         <div className="editor-stack">
           {band.map((row) => (
             <div key={row.center} className="vim-band" style={{ top: row.center - row.height / 2, height: row.height }} aria-hidden data-testid="vim-band" />

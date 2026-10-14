@@ -72,7 +72,11 @@ test('focus mode dims everything except the current sentence', async ({ page }) 
   await expect(dimmed).toContainText('One alpha.')
   await expect(dimmed).toContainText('Two beta.')
   await expect(dimmed).not.toContainText('Three gamma.')
-  await expect.poll(() => dimmed.first().evaluate((element) => getComputedStyle(element).opacity)).toBe('0.25')
+  // a flat colour between the text and the page, never a fade
+  const ink = await highlight.evaluate((element) => getComputedStyle(element).color)
+
+  await expect.poll(() => dimmed.first().evaluate((element) => getComputedStyle(element).opacity)).toBe('1')
+  await expect.poll(() => dimmed.first().evaluate((element) => getComputedStyle(element).color)).not.toBe(ink)
 
   // paragraph scope lights the whole paragraph instead
   await page.getByTestId('options').click()
@@ -509,4 +513,116 @@ test('typewriter mode centres the first line, and glides to the caret line while
   await page.waitForTimeout(250)
   await expect(scroller).toHaveJSProperty('scrollTop', 0)
   expect(Math.abs(await caretOffset(page))).toBeLessThan(4)
+})
+
+test('focus mode centres the caret line at once, and gives the typewriter setting back when it ends', async ({ page }) => {
+  await startWriting(page, 'First line')
+
+  const editor = page.getByTestId('editor')
+  const column = page.getByTestId('editor-column')
+  const scroller = page.getByTestId('editor-scroll')
+  const docStart = process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home'
+  const docEnd = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End'
+
+  await page.keyboard.press(docEnd)
+
+  for (let paragraph = 1; paragraph <= 12; paragraph += 1) {
+    await page.keyboard.type(`\n\nParagraph ${paragraph} goes on for a while so that the line wraps around the column at least once or twice more.`)
+  }
+
+  await page.keyboard.press(docStart)
+  await expect(column).toHaveAttribute('data-typewriter', 'false')
+  await expect(scroller).toHaveJSProperty('scrollTop', 0)
+
+  // without focus the first line sits near the top
+  expect(await caretOffset(page)).toBeLessThan(-100)
+
+  await page.keyboard.press('ControlOrMeta+D')
+  await expect(column).toHaveAttribute('data-typewriter', 'true')
+  await expect.poll(async () => Math.abs(await caretOffset(page))).toBeLessThan(4)
+
+  // the scroll follows the caret down the page while focus is on
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await expect.poll(async () => Math.abs(await caretOffset(page))).toBeLessThan(4)
+
+  // the options menu shows typewriter scrolling as on and fixed, and the setting itself is untouched
+  await page.getByTestId('options').click()
+  await expect(page.getByTestId('option-typewriter')).toBeChecked()
+  await expect(page.getByTestId('option-typewriter')).toBeDisabled()
+  await page.keyboard.press('Escape')
+
+  await page.getByTestId('toggle-focus').click()
+  await expect(page.getByTestId('toggle-focus')).toHaveAttribute('aria-pressed', 'false')
+  await expect(column).toHaveAttribute('data-typewriter', 'false')
+
+  await page.getByTestId('options').click()
+  await expect(page.getByTestId('option-typewriter')).not.toBeChecked()
+  await expect(page.getByTestId('option-typewriter')).toBeEnabled()
+  await page.keyboard.press('Escape')
+
+  // a typewriter setting made beforehand outlives focus mode
+  await page.getByTestId('options').click()
+  await page.getByTestId('option-typewriter').check()
+  await page.keyboard.press('Escape')
+  await editor.click()
+  await page.keyboard.press('ControlOrMeta+D')
+  await page.keyboard.press('ControlOrMeta+D')
+  await expect(column).toHaveAttribute('data-typewriter', 'true')
+})
+
+test('the Typewriter focus scope centres the line and dims nothing', async ({ page }) => {
+  await startWriting(page, 'One alpha. Two beta. Three gamma.')
+
+  await page.getByTestId('options').click()
+  await page.getByRole('radio', { name: 'Typewriter' }).click()
+  await page.keyboard.press('Escape')
+
+  await expect(page.getByTestId('toggle-focus')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('editor-column')).toHaveAttribute('data-typewriter', 'true')
+  await expect(page.getByTestId('highlight').locator('.dim')).toHaveCount(0)
+})
+
+test('everything outside the focus is one flat colour: prose, headings, parts of speech and code', async ({ page }) => {
+  await startWriting(page, '# Heading\n\nThe quiet writer really reads beautiful books.\n\n```ts\nconst answer: number = 42\n```\n\nFinal sentence here.')
+  await page.getByTestId('toggle-syntax').click()
+  await page.getByTestId('toggle-style').click()
+  await page.keyboard.press('ControlOrMeta+D')
+  await expect(page.getByTestId('toggle-focus')).toHaveAttribute('aria-pressed', 'true')
+
+  const highlight = page.getByTestId('highlight')
+  const dark = process.platform === 'darwin' ? 'Meta+Control+N' : 'Control+Alt+N'
+
+  const sampled = async (selector: string) =>
+    highlight.locator(selector).first().evaluate((element) => {
+      const style = getComputedStyle(element)
+
+      return { color: style.color, decoration: style.textDecorationColor, weight: style.fontWeight }
+    })
+
+  for (const theme of ['light', 'dark']) {
+    if (theme === 'dark') await page.keyboard.press(dark)
+
+    const ink = await highlight.evaluate((element) => getComputedStyle(element).color)
+    const plain = await sampled('.dim:not([class*="pos-"], [class*="md-"], .code-tok)')
+
+    const samples = [
+      await sampled('.dim.pos-noun'),
+      await sampled('.dim.pos-verb'),
+      await sampled('.dim.code-tok'),
+      await sampled('.dim.md-h1'),
+      await sampled('.dim.md-mark'),
+      await sampled('.dim.style-filler'),
+    ]
+
+    expect(plain.color).not.toBe(ink)
+
+    for (const sample of samples) expect(sample.color).toBe(plain.color)
+
+    // underlines dim with the text, headings stay bold, and the lit sentence keeps its own colours
+    expect((await sampled('.dim.style-filler')).decoration).toBe(plain.color)
+    expect((await sampled('.dim.md-h1')).weight).toBe('700')
+    expect((await sampled('.pos-noun:not(.dim)')).color).not.toBe(plain.color)
+  }
 })

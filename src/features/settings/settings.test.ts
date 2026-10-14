@@ -1,7 +1,7 @@
 import { Schema } from 'effect'
 import { describe, expect, it } from 'vitest'
 
-import { defaultSettings, FONT_SIZE, nextCounter, resizedFont, Settings, styleOptions, syntaxOptions } from './settings.ts'
+import { defaultSettings, dimScope, FONT_SIZE, nextCounter, resizedFont, Settings, styleOptions, syntaxOptions, typewriterActive } from './settings.ts'
 
 describe('settings', () => {
   it('follows the system theme on first use', () => {
@@ -39,5 +39,27 @@ describe('settings', () => {
     expect(styleOptions(settings)).toBeNull()
     expect(syntaxOptions({ ...settings, syntax: true, verbs: false })?.verbs).toBe(false)
     expect(styleOptions({ ...settings, style: true })?.fillers).toBe(true)
+  })
+
+  it('centres the caret line whenever typewriter or focus is on, without touching the typewriter setting', () => {
+    const settings = defaultSettings(false)
+
+    expect(typewriterActive(settings)).toBe(false)
+    expect(typewriterActive({ ...settings, typewriter: true })).toBe(true)
+
+    const focused = { ...settings, focus: true }
+
+    expect(typewriterActive(focused)).toBe(true)
+    expect(focused.typewriter).toBe(false)
+    expect(typewriterActive({ ...focused, focus: false })).toBe(false)
+  })
+
+  it('dims only for the sentence and paragraph scopes while focus is on', () => {
+    const settings = defaultSettings(false)
+
+    expect(dimScope(settings)).toBeNull()
+    expect(dimScope({ ...settings, focus: true })).toBe('sentence')
+    expect(dimScope({ ...settings, focus: true, focusScope: 'paragraph' })).toBe('paragraph')
+    expect(dimScope({ ...settings, focus: true, focusScope: 'typewriter' })).toBeNull()
   })
 })

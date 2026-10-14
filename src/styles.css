@@ -110,6 +110,10 @@
   --style-filler: #d49a1c;
   --style-cliche: #cf5b4c;
   --style-redundancy: #8d63b3;
+
+  /* how much of the text colour the dimmed text keeps (the rest is the page); light needs more to read as well as dark */
+  --dim-share: 42%;
+  --dim: color-mix(in oklab, var(--ink) var(--dim-share), var(--paper));
 }
 
 .dark {
@@ -132,6 +136,8 @@
   --style-filler: #e3b24a;
   --style-cliche: #ee8272;
   --style-redundancy: #bb98df;
+
+  --dim-share: 38%;
 }
 
 @theme inline {
@@ -263,10 +269,6 @@ body {
 .editor-input::placeholder {
   color: var(--ink-faint);
   -webkit-text-fill-color: var(--ink-faint);
-}
-
-.editor-highlight .dim {
-  opacity: 0.25;
 }
 
 /* Vim's block cursor: the character under it inverted, or one empty cell at a line end; the real caret hides */
@@ -407,6 +409,14 @@ body {
 
 :where(.dark) .editor-highlight .code-tok {
   color: var(--tok-dark);
+}
+
+/* Focus mode: everything outside the lit range is one flat tone, as in iA Writer (no opacity, so layers do not blend).
+   The text colour pulled toward the page: markers, headings, links, part-of-speech and code colours and the style-check underlines
+   all give way to it; weights, italics and the code background stay. A Vim cursor keeps its own colours. */
+.editor-highlight .dim:not(.vim-cursor) {
+  color: var(--dim);
+  text-decoration-color: var(--dim);
 }
 
 /* After the styling rules above, so the block wins over a part-of-speech colour */

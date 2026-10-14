@@ -9,7 +9,7 @@ import { initialVimState, isVisual } from '../../core/vim/state.ts'
 import type { VimState } from '../../core/vim/state.ts'
 import { cursorOf } from '../../core/vim/vim.ts'
 import { settingsAtom } from '../settings/atoms.ts'
-import { styleOptions, syntaxOptions } from '../settings/settings.ts'
+import { dimScope, styleOptions, syntaxOptions } from '../settings/settings.ts'
 
 /** The text of the open document. */
 export const textAtom = Atom.make('').pipe(Atom.keepAlive)
@@ -52,7 +52,8 @@ export const segmentsAtom = Atom.make((get) => {
   const text = get(textAtom)
   const settings = get(settingsAtom)
   const end = get(caretAtom)
-  const focus = settings.focus ? focusRange(text, end, settings.focusScope, documentLocale) : null
+  const scope = dimScope(settings)
+  const focus = scope === null ? null : focusRange(text, end, scope, documentLocale)
 
   return buildSegments(text, {
     syntax: syntaxOptions(settings),
