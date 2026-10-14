@@ -12,13 +12,11 @@ import { caretAtom, segmentsAtom, selectionAtom, textAtom, typingAtom, vimAtom }
 import { activeIdAtom, autosaveAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { applyEdit, editorInputAtom } from './editor-input.ts'
+import { useCaretScroll } from './useCaretScroll.ts'
 import { runVimKey } from './vim-input.ts'
 import { visualRows } from './vim-rows.ts'
 import { selectionRows } from './vim-selection.ts'
 import type { BandRow } from './vim-selection.ts'
-
-/** The space the caret keeps from the top and bottom edge while it scrolls into view. */
-const CARET_MARGIN = 96
 
 type ToneStyle = CSSProperties & { '--tok-light': string; '--tok-dark': string }
 
@@ -62,6 +60,7 @@ function renderSegments(text: string, segments: readonly Segment[], caret: numbe
   const marker = (
     <span
       key="caret"
+      data-testid="caret-marker"
       ref={(element) => {
         markerRef.current = element
       }}
@@ -198,25 +197,7 @@ export function Editor() {
   }, [activeId, settings.vim, commitVim, setSelection])
 
   // keep the caret in view; typewriter mode keeps it in the middle
-  useLayoutEffect(() => {
-    const scroller = scrollRef.current
-    const marker = markerRef.current
-
-    if (!scroller || !marker || document.activeElement !== inputRef.current) return
-
-    const view = scroller.getBoundingClientRect()
-    const caret = marker.getBoundingClientRect()
-
-    if (settings.typewriter) {
-      const offset = caret.top + caret.height / 2 - view.top - scroller.clientHeight / 2
-
-      if (Math.abs(offset) > 1) scroller.scrollTop += offset
-    } else if (caret.bottom > view.bottom - CARET_MARGIN) {
-      scroller.scrollTop += caret.bottom - (view.bottom - CARET_MARGIN)
-    } else if (caret.top < view.top + CARET_MARGIN) {
-      scroller.scrollTop -= view.top + CARET_MARGIN - caret.top
-    }
-  }, [segments, settings.typewriter])
+  useCaretScroll(scrollRef, inputRef, markerRef, highlightRef, settings.typewriter, segments)
 
   // linewise visual mode paints its own band of full-width rows behind the text; it follows the layer's wrapping
   const measureBand = useCallback((): void => {

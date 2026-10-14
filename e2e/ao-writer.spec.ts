@@ -457,3 +457,56 @@ test('vim keys: Ctrl+R is redo in normal mode, Escape still closes menus, and th
   await page.keyboard.type('xyz')
   await expect(editor).toHaveValue('xyz')
 })
+
+/** How far the caret line's centre is from the scroll container's centre, in px. */
+const caretOffset = (page: Page): Promise<number> =>
+  page.evaluate(() => {
+    const scroller = document.querySelector('[data-testid=editor-scroll]')
+    const marker = document.querySelector('[data-testid=caret-marker]')
+
+    if (!scroller || !marker) return Number.NaN
+
+    const view = scroller.getBoundingClientRect()
+    const caret = marker.getBoundingClientRect()
+
+    return caret.top + caret.height / 2 - (view.top + view.height / 2)
+  })
+
+test('typewriter mode centres the first line, and glides to the caret line while typing', async ({ page }) => {
+  await startWriting(page, 'First line')
+  await page.getByTestId('options').click()
+  await page.getByTestId('option-typewriter').check()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('options-menu')).toHaveCount(0)
+
+  const editor = page.getByTestId('editor')
+  const scroller = page.getByTestId('editor-scroll')
+
+  const docStart = process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home'
+  const docEnd = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End'
+
+  await editor.click()
+  await page.keyboard.press(docStart)
+
+  // the first line can sit in the middle of an unscrolled page
+  await expect(scroller).toHaveJSProperty('scrollTop', 0)
+  expect(Math.abs(await caretOffset(page))).toBeLessThan(4)
+
+  await page.keyboard.press(docEnd)
+
+  for (let paragraph = 1; paragraph <= 12; paragraph += 1) {
+    await page.keyboard.type(`\n\nParagraph ${paragraph} goes on for a while so that the line wraps around the column at least once or twice more.`)
+  }
+
+  // the glide is 150 ms; give it a little more
+  await page.waitForTimeout(250)
+
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(300)
+  expect(Math.abs(await caretOffset(page))).toBeLessThan(4)
+
+  // arrow keys re-centre as well
+  await page.keyboard.press(docStart)
+  await page.waitForTimeout(250)
+  await expect(scroller).toHaveJSProperty('scrollTop', 0)
+  expect(Math.abs(await caretOffset(page))).toBeLessThan(4)
+})

@@ -59,11 +59,72 @@ describe('sentenceRange', () => {
     expect(sentenceRange(typing, typing.length)).toEqual({ start: typing.length, end: typing.length })
   })
 
-  it('does not split on abbreviations, initials or decimals', () => {
-    const doc = 'Dr. Smith paid 3.5 euros, e.g. for tea. Then J. K. Rowling left.'
+  it('does not split on decimals or on abbreviations that continue in lower case', () => {
+    const doc = 'Dr. Smith paid 3.14 euros, e.g. for tea. Then he left.'
 
-    expect(sliceOf(doc, sentenceRange(doc, 5))).toBe('Dr. Smith paid 3.5 euros, e.g. for tea.')
-    expect(sliceOf(doc, sentenceRange(doc, 50))).toBe('Then J. K. Rowling left.')
+    expect(sliceOf(doc, sentenceRange(doc, 30))).toBe('Smith paid 3.14 euros, e.g. for tea.')
+    expect(sliceOf(doc, sentenceRange(doc, 48))).toBe('Then he left.')
+  })
+
+  it('keeps e.g. and U.S. inside their sentence', () => {
+    const doc = 'See e.g. the manual. She lives in the U.S. now. Fine.'
+
+    expect(sliceOf(doc, sentenceRange(doc, 8))).toBe('See e.g. the manual.')
+    expect(sliceOf(doc, sentenceRange(doc, 35))).toBe('She lives in the U.S. now.')
+    expect(sliceOf(doc, sentenceRange(doc, doc.length))).toBe('Fine.')
+  })
+
+  it('follows the ICU rules for a title or initial before a capital: the sentence ends there', () => {
+    const doc = 'Dr. Smith left.'
+
+    expect(sliceOf(doc, sentenceRange(doc, 1))).toBe('Dr.')
+    expect(sliceOf(doc, sentenceRange(doc, 8))).toBe('Smith left.')
+  })
+
+  it('splits on question and exclamation marks, also when combined', () => {
+    const doc = 'Really?! Yes! Wait... what? Done.'
+
+    expect(sliceOf(doc, sentenceRange(doc, 2))).toBe('Really?!')
+    expect(sliceOf(doc, sentenceRange(doc, 11))).toBe('Yes!')
+    expect(sliceOf(doc, sentenceRange(doc, 25))).toBe('Wait... what?')
+    expect(sliceOf(doc, sentenceRange(doc, doc.length))).toBe('Done.')
+  })
+
+  it('keeps an ellipsis followed by lower case inside its sentence', () => {
+    const doc = 'Wait... what is that? Nothing.'
+
+    expect(sliceOf(doc, sentenceRange(doc, 3))).toBe('Wait... what is that?')
+  })
+
+  it('keeps closing quotes and brackets with the sentence', () => {
+    const doc = 'He said "stop." Then (quietly) he left. (Really.) Done.'
+
+    expect(sliceOf(doc, sentenceRange(doc, 3))).toBe('He said "stop."')
+    expect(sliceOf(doc, sentenceRange(doc, 20))).toBe('Then (quietly) he left.')
+    expect(sliceOf(doc, sentenceRange(doc, 42))).toBe('(Really.)')
+  })
+
+  it('segments German text with the German locale, decimals and clock times included', () => {
+    const doc = 'Das kostet 3,50 Euro, d. h. wenig. Er kam um 3.30 Uhr. Dann ging er.'
+
+    expect(sliceOf(doc, sentenceRange(doc, 5, 'de'))).toBe('Das kostet 3,50 Euro, d. h. wenig.')
+    expect(sliceOf(doc, sentenceRange(doc, 45, 'de'))).toBe('Er kam um 3.30 Uhr.')
+    expect(sliceOf(doc, sentenceRange(doc, doc.length, 'de'))).toBe('Dann ging er.')
+  })
+
+  it('ends a German sentence after z. when a capital B. follows: ICU has no abbreviation list for it', () => {
+    const doc = 'Das ist z. B. gut.'
+
+    expect(sliceOf(doc, sentenceRange(doc, 2, 'de'))).toBe('Das ist z.')
+    expect(sliceOf(doc, sentenceRange(doc, 12, 'de'))).toBe('B. gut.')
+  })
+
+  it('treats a list marker as part of the item, not as a sentence of its own', () => {
+    const doc = '1. First item. More words here.\n- Bullet one. Bullet two.'
+
+    expect(sliceOf(doc, sentenceRange(doc, 1))).toBe('1. First item.')
+    expect(sliceOf(doc, sentenceRange(doc, 20))).toBe('More words here.')
+    expect(sliceOf(doc, sentenceRange(doc, 34))).toBe('- Bullet one.')
   })
 
   it('keeps closing quotes with the sentence', () => {
@@ -92,6 +153,12 @@ describe('sentenceRange', () => {
 })
 
 describe('focusRange', () => {
+  it('passes the locale on to the sentence rules', () => {
+    const text = 'Das ist d. h. gut. Ja.'
+
+    expect(sliceOf(text, focusRange(text, 2, 'sentence', 'de'))).toBe('Das ist d. h. gut.')
+  })
+
   it('chooses by scope', () => {
     const text = 'One. Two.'
 

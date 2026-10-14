@@ -209,8 +209,9 @@ body {
   line-height: 1.7;
 }
 
+/* half the scroll container minus half a line, so the first and the last line can sit exactly in the middle */
 .editor-column[data-typewriter='true'] {
-  padding-block: 50cqh;
+  padding-block: calc(50cqh - 0.85em);
 }
 
 .editor-stack {
@@ -262,10 +263,6 @@ body {
 .editor-input::placeholder {
   color: var(--ink-faint);
   -webkit-text-fill-color: var(--ink-faint);
-}
-
-.editor-highlight span {
-  transition: opacity 0.4s ease;
 }
 
 .editor-highlight .dim {

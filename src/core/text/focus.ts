@@ -9,13 +9,10 @@ export type FocusScope = 'sentence' | 'paragraph'
 
 const BLOCK_LINE = /^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|```|~~~|\||(?:-{3,}|\*{3,}|_{3,})\s*$)/
 
-const TERMINATORS = '.!?'
+/** The Markdown marker a block line starts with: heading hashes, a list bullet or number, or quote arrows. */
+const LINE_MARKER = /^\s*(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|(?:>\s?)+)/
 
-const CLOSERS = '"\'”’)]*_~'
-
-const ABBREVIATIONS: ReadonlySet<string> = new Set([
-  'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st', 'vs', 'etc', 'inc', 'ltd', 'co', 'no', 'fig', 'approx', 'e.g', 'i.e', 'cf', 'al',
-])
+const segmenters = new Map<string, Intl.Segmenter>()
 
 function lineStart(text: string, pos: number): number {
   return text.lastIndexOf('\n', pos - 1) + 1
@@ -88,80 +85,56 @@ function trimEnd(text: string, from: number, limit: number): number {
   return index
 }
 
-function precedingWord(text: string, dot: number, from: number): string {
-  let begin = dot
+function segmenterFor(locale: string): Intl.Segmenter {
+  const cached = segmenters.get(locale)
 
-  while (begin > from && !isSpace(text[begin - 1])) begin -= 1
+  if (cached !== undefined) return cached
 
-  return text.slice(begin, dot).replace(/^[("'“‘*_]+/, '')
-}
+  const created = new Intl.Segmenter(locale, { granularity: 'sentence' })
 
-/** True when the period at `dot` ends an abbreviation or initial, so the sentence goes on. */
-function isAbbreviation(text: string, dot: number, from: number, next: number, limit: number): boolean {
-  const word = precedingWord(text, dot, from)
+  segmenters.set(locale, created)
 
-  if (ABBREVIATIONS.has(word.toLowerCase())) return true
-
-  if (/^\p{Lu}$/u.test(word)) return true
-
-  const following = next < limit ? text[next] : undefined
-
-  return following !== undefined && /\p{Ll}/u.test(following)
-}
-
-/** The exclusive end of the sentence that starts at `from`, without its trailing whitespace. */
-function sentenceEnd(text: string, from: number, limit: number): number {
-  let index = from
-
-  while (index < limit) {
-    if (TERMINATORS.includes(text[index] ?? '')) {
-      const runStart = index
-      let end = index
-
-      while (end < limit && TERMINATORS.includes(text[end] ?? '')) end += 1
-
-      while (end < limit && CLOSERS.includes(text[end] ?? '')) end += 1
-
-      if (end >= limit || isSpace(text[end])) {
-        const single = text[runStart] === '.' && end - runStart === 1
-        const next = skipSpace(text, end, limit)
-
-        if (!single || !isAbbreviation(text, runStart, from, next, limit)) return end
-      }
-
-      index = end
-    } else {
-      index += 1
-    }
-  }
-
-  return trimEnd(text, from, limit)
+  return created
 }
 
 /**
-The sentence around the caret. A caret in the whitespace after a finished sentence starts a new one, so the range is empty there.
+The paragraph as the segmenter should see it, with the same length as the text: line breaks inside a paragraph are soft wraps, not sentence ends,
+and a block line's marker (`1. `, `- `, `# `) is blanked so that it is not read as a sentence of its own.
 */
-export function sentenceRange(text: string, caret: number): TextRange {
+function segmenterInput(text: string, paragraph: TextRange): string {
+  const block = text.slice(paragraph.start, paragraph.end)
+  const marker = LINE_MARKER.exec(block)?.[0] ?? ''
+
+  return (' '.repeat(marker.length) + block.slice(marker.length)).replace(/[\r\n]/g, ' ')
+}
+
+/**
+The sentence around the caret, split by ICU's sentence rules for `locale`. A caret in the whitespace after a finished sentence starts a new one, so the range is empty there.
+Only the caret's paragraph is segmented.
+*/
+export function sentenceRange(text: string, caret: number, locale = 'en'): TextRange {
   const position = Math.max(0, Math.min(caret, text.length))
   const paragraph = paragraphRange(text, position)
 
   if (paragraph.start === paragraph.end) return paragraph
 
-  let start = skipSpace(text, paragraph.start, paragraph.end)
+  const first = skipSpace(text, paragraph.start, paragraph.end)
+  let range: TextRange = { start: first, end: first }
 
-  for (;;) {
-    const end = sentenceEnd(text, start, paragraph.end)
-    const next = skipSpace(text, end, paragraph.end)
+  for (const { index, segment } of segmenterFor(locale).segment(segmenterInput(text, paragraph))) {
+    const limit = paragraph.start + index + segment.length
+    const start = Math.max(first, skipSpace(text, paragraph.start + index, limit))
 
-    if (position < next || next >= paragraph.end) {
-      return position <= end ? { start, end } : { start: position, end: position }
-    }
+    range = { start, end: trimEnd(text, start, limit) }
 
-    start = next
+    // the segment keeps the whitespace after its sentence, so the next one begins where this one ends
+    if (position < limit) break
   }
+
+  return position <= range.end ? range : { start: position, end: position }
 }
 
 /** The lit range for the given scope. */
-export function focusRange(text: string, caret: number, scope: FocusScope): TextRange {
-  return scope === 'sentence' ? sentenceRange(text, caret) : paragraphRange(text, caret)
+export function focusRange(text: string, caret: number, scope: FocusScope, locale = 'en'): TextRange {
+  return scope === 'sentence' ? sentenceRange(text, caret, locale) : paragraphRange(text, caret)
 }

@@ -112,11 +112,24 @@ visual mode and the preview shortcut in insert mode (on a Mac the preview stays 
 and `k` act on whole logical lines, as in Vim. Not included: `.` repeat, text objects, `/` search, named registers,
 `:` commands, macros, blockwise visual mode (`Ctrl+V`).
 
-Other behaviour: Enter continues lists, task lists and quotes (and leaves them on an empty item); typewriter
-mode keeps the caret line in the middle of the screen; the status bar counter cycles through words, characters,
+Other behaviour: Enter continues lists, task lists and quotes (and leaves them on an empty item); the status bar counter cycles through words, characters,
 reading time (220 wpm) and speaking time (150 wpm) when you click it, and counts the selection while text is
 selected; the chrome fades while you type and returns when the mouse moves; documents autosave 500 ms after
 the last keystroke (and when the tab hides).
+
+## Focus and typewriter
+
+Focus mode finds the current sentence with the browser's `Intl.Segmenter` (ICU sentence rules, for the browser's
+language), applied to the caret's paragraph only. ICU keeps `3.14`, `e.g. the` and `U.S. now` inside a sentence, but it
+has no abbreviation list: a title or initial followed by a capital (`Dr. Smith`, `z. B.`) ends the sentence. Paragraph
+scope is the block between blank lines, with each list item, heading and quote line as its own block. Dimmed text
+switches at once, with no fade.
+
+Typewriter mode re-centres the caret line on every selection change, with a 150 ms ease-out glide on the scroll
+position (a jump when the system asks for reduced motion). A caret line already within 3% of the window height from
+the middle stays put. Keys and Vim motions scroll immediately; a mouse click or drag waits 150 ms after the button
+comes up. The page has half a window of padding above and below, so the first and last line can be centred.
+Without typewriter mode the page only scrolls when the caret comes within 96 px of an edge.
 
 ## How it works
 
@@ -127,7 +140,7 @@ the last keystroke (and when the tab hides).
   applies it; wrapped-row moves are measured on the highlight layer in `app/vim-rows.ts`.
 - **`src/core`**: framework-free TypeScript with unit tests: `pos/` (lexicon + suffix rules + context rules
   tagger), `style/` (word lists and a phrase matcher), `markdown/` (live-styling ranges, safe HTML renderer,
-  format edits, the colour-token types of fenced code), `text/` (counts, sentence and paragraph detection), `vim/` (key → result: motions,
+  format edits, the colour-token types of fenced code), `text/` (counts, sentence and paragraph detection), `editor/typewriter.ts` (the typewriter scroll maths), `vim/` (key → result: motions,
   operators, registers; no DOM), `shortcuts.ts`.
 - **`src/features`**: Effect 4 services and atoms. `library/storage.ts` is the `DocumentStorage` service (OPFS
   layer with an IndexedDB fallback and an in-memory layer for tests), `library/atoms.ts` holds the documents,

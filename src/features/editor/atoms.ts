@@ -44,12 +44,15 @@ export const selectionCountsAtom = Atom.make((get) => {
   return end > start ? countText(get(textAtom).slice(start, end)) : null
 })
 
+/** The language the sentence rules follow: the browser's, or English where there is none. */
+const documentLocale = globalThis.navigator?.language || 'en'
+
 /** The overlay behind the textarea: Markdown styling plus whichever of syntax, style check and focus are on. */
 export const segmentsAtom = Atom.make((get) => {
   const text = get(textAtom)
   const settings = get(settingsAtom)
   const end = get(caretAtom)
-  const focus = settings.focus ? focusRange(text, end, settings.focusScope) : null
+  const focus = settings.focus ? focusRange(text, end, settings.focusScope, documentLocale) : null
 
   return buildSegments(text, {
     syntax: syntaxOptions(settings),
