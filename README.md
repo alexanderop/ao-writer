@@ -68,9 +68,11 @@ through the same path as typing, so the browser's own undo keeps working.
 | `w` `b` `e` | Word forward, word back, end of word (a run of punctuation is a word, and so is an empty line) |
 | `0` `^` `$` | Start of line, first non-blank, end of line |
 | `J` `K` | Jump 10 rows down or up (by wrapped row, like `10j` / `10k`; `2J` jumps 20, `dJ` deletes 11 lines). Replaces Vim's join-lines `J` and keyword-lookup `K` |
+| `f` `F` `t` `T` + char | Find a character on the current line: `f` and `F` land on the next or previous one, `t` and `T` stop just before or after it; `3fa` goes to the third `a`. Any single key is a character (space, punctuation, `ü`). Nothing is found on other lines, and a miss neither moves nor, after an operator, deletes |
+| `;` `,` | Repeat the last find in the same or the opposite direction; after `t` or `T` a match right next to the cursor is skipped, so the cursor keeps going |
 | `gg` `G` | First and last line; with a count, that line (`3G`) |
 | `2w` `3l` `5j` | Counts work for motions, for operators (`2dd`, `d3w`) and for `p` |
-| `d` `c` `y` + motion | Delete, change (delete and insert), yank; `dd` `cc` `yy` act on lines, `dw` `cw` `d$` `dj` on a range |
+| `d` `c` `y` + motion | Delete, change (delete and insert), yank; `dd` `cc` `yy` act on lines, `dw` `cw` `d$` `dj` on a range; `dfx` `dt.` `cf)` `yFx` work too (`f` and `t` reach through their target, `F` and `T` stop in front of it) |
 | `x` `X` `D` `C` `s` `S` `Y` | `dl`, `dh`, `d$`, `c$`, `cl`, `cc`, `yy` |
 | `p` `P` | Paste after or before the cursor; a yanked line is pasted as a line |
 | `i` `a` `I` `A` `o` `O` | Insert before or after the cursor, at the first non-blank or the end of the line, on a new line below or above |

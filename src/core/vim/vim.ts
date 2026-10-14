@@ -2,7 +2,7 @@ import type { TextRange } from '../text/focus.ts'
 import { charLength, clampNormal, firstNonBlank, lineEnd, lineNumber, lineStart, lineStartOf, previousChar } from './lines.ts'
 import * as motions from './motions.ts'
 import { isVisual, VimResult } from './state.ts'
-import type { Mode, RowMotion, VimKey, VimState } from './state.ts'
+import type { Find, FindKind, Mode, RowMotion, VimKey, VimState } from './state.ts'
 
 type Operator = 'd' | 'c' | 'y'
 
@@ -20,6 +20,13 @@ interface Operand {
   readonly range: TextRange
   readonly linewise: boolean
 }
+
+const FIND_KINDS: readonly string[] = ['f', 'F', 't', 'T']
+
+/** Keys that press nothing by themselves; a find waiting for its character lets them pass. */
+const MODIFIER_KEYS: ReadonlySet<string> = new Set(['Shift', 'Control', 'Alt', 'AltGraph', 'Meta', 'CapsLock', 'Dead'])
+
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 
 const times = (count: number): number => Math.max(1, count)
 
@@ -96,6 +103,41 @@ const SHORTCUT_OPERATORS: ReadonlyMap<string, readonly [Operator, string]> = new
 
 function isOperator(key: string): key is Operator {
   return key === 'd' || key === 'c' || key === 'y'
+}
+
+function isFindKind(key: string): key is FindKind {
+  return FIND_KINDS.includes(key)
+}
+
+/** The operator and the find kind a pending string waits on (`f`, `dt`), or null when it waits for something else. */
+function pendingFind(pending: string): { readonly operator: Operator | null; readonly kind: FindKind } | null {
+  const kind = pending.slice(-1)
+  const operator = pending.slice(0, -1)
+
+  if (!isFindKind(kind)) return null
+
+  if (operator === '') return { operator: null, kind }
+
+  return isOperator(operator) ? { operator, kind } : null
+}
+
+/** `f` and `t` reach through their target; `F` and `T` stop in front of it, as Vim has it. */
+function findMotionKind(kind: FindKind): MotionKind {
+  return kind === 'f' || kind === 't' ? 'inclusive' : 'exclusive'
+}
+
+/** `,` repeats a find the other way round. */
+function reversed(kind: FindKind): FindKind {
+  switch (kind) {
+    case 'f':
+      return 'F'
+    case 'F':
+      return 'f'
+    case 't':
+      return 'T'
+    case 'T':
+      return 't'
+  }
 }
 
 function isDigit(key: string): boolean {
@@ -316,11 +358,42 @@ function moveTo(state: VimState, text: string, target: { pos: number; goalX: num
   }
 }
 
+/** Starts waiting for the character of a find. The count so far moves to the front, so the status bar reads `d2f`. */
+function awaitFind(state: VimState, operator: Operator | null, kind: FindKind): VimResult {
+  return VimResult.Stay({ state: { ...state, pending: `${operator ?? ''}${kind}`, operatorCount: totalCount(state), count: 0 } })
+}
+
+/** Runs a find: moves the cursor to its target, or applies the operator over the way there. A miss changes nothing and cancels the operator. */
+function runFind(state: VimState, found: Find, repeating: boolean, operator: Operator | null, text: string, pos: number): VimResult {
+  // `,` goes the other way once without turning the remembered find around
+  const remembered = repeating ? state : { ...state, lastFind: found }
+  const position = motions.findTarget(text, pos, found, times(totalCount(state)), repeating)
+
+  if (position === null) return VimResult.Stay({ state: settled(remembered) })
+
+  if (operator === null) return moveTo(remembered, text, { pos: position, goalX: null })
+
+  return operate(remembered, operator, text, pos, operandOf(text, pos, { kind: findMotionKind(found.kind), target: () => position }, 0))
+}
+
+/** `;` repeats the last find, `,` repeats it the other way round. */
+function repeatFind(state: VimState, key: string, operator: Operator | null, text: string, pos: number): VimResult {
+  const last = state.lastFind
+
+  if (last === null) return VimResult.Stay({ state: settled(state) })
+
+  return runFind(state, key === ',' ? { ...last, kind: reversed(last.kind) } : last, true, operator, text, pos)
+}
+
 /** A pending operator meets its motion, or its own key for whole lines (`dd`). */
 function operatorKey(state: VimState, operator: Operator, key: string, text: string, pos: number): VimResult {
   if (key === operator) return operate(state, operator, text, pos, linesOperand(text, pos, totalCount(state)))
 
   if (key === 'g') return VimResult.Stay({ state: { ...state, pending: `${operator}g` } })
+
+  if (isFindKind(key)) return awaitFind(state, operator, key)
+
+  if (key === ';' || key === ',') return repeatFind(state, key, operator, text, pos)
 
   const spec = specFor(operator, key, text, pos)
 
@@ -340,6 +413,14 @@ function normalKey(state: VimState, key: string, text: string, pos: number, rows
   switch (key) {
     case 'g':
       return VimResult.Stay({ state: { ...state, pending: 'g' } })
+    case 'f':
+    case 'F':
+    case 't':
+    case 'T':
+      return awaitFind(state, null, key)
+    case ';':
+    case ',':
+      return repeatFind(state, key, null, text, pos)
     case 'd':
     case 'c':
     case 'y':
@@ -451,6 +532,14 @@ function visualKey(state: VimState, key: string, text: string, cursor: number, r
   switch (key) {
     case 'g':
       return VimResult.Stay({ state: { ...state, pending: 'g' } })
+    case 'f':
+    case 'F':
+    case 't':
+    case 'T':
+      return awaitFind(state, null, key)
+    case ';':
+    case ',':
+      return repeatFind(state, key, null, text, cursor)
     case 'o':
       return enterVisual(state, text, lines ? 'visual-line' : 'visual', cursor, state.visualAnchor)
     case 'v':
@@ -499,6 +588,25 @@ function commandName(input: VimKey): string | null {
   return input.key
 }
 
+/** The character a key types, or null for a chord, a modifier or a named key such as "Enter". */
+function typedChar(input: VimKey): string | null {
+  if (input.ctrlKey) return null
+
+  return [...GRAPHEMES.segment(input.key)].length === 1 ? input.key : null
+}
+
+/** A find waits for its character: any single one, a space and punctuation included. Escape or any other key cancels it. */
+function findKey(state: VimState, input: VimKey, text: string, selection: TextRange, kind: FindKind, operator: Operator | null): VimResult {
+  const char = typedChar(input)
+
+  if (char !== null) return runFind(state, { kind, char }, false, operator, text, cursorOf(state, text, selection))
+
+  // Shift on its way to a capital letter is not an answer
+  if (MODIFIER_KEYS.has(input.key)) return VimResult.Stay({ state })
+
+  return VimResult.Stay({ state: settled(state) })
+}
+
 function insertKey(state: VimState, input: VimKey, text: string, selection: TextRange): VimResult {
   if (commandName(input) !== 'Escape') return VimResult.Pass()
 
@@ -516,6 +624,10 @@ export function handleKey(state: VimState, input: VimKey, text: string, selectio
   if (input.metaKey || input.altKey) return VimResult.Pass()
 
   if (state.mode === 'insert') return insertKey(state, input, text, selection)
+
+  const waiting = pendingFind(state.pending)
+
+  if (waiting !== null) return findKey(state, input, text, selection, waiting.kind, waiting.operator)
 
   const key = commandName(input)
 

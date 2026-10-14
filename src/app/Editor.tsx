@@ -276,7 +276,7 @@ export function Editor() {
     const scroller = event.currentTarget
 
     // a click moves the caret on its own, which ends a visual selection
-    if (isVisual(vimRef.current.mode)) commitVim({ ...initialVimState, register: vimRef.current.register })
+    if (isVisual(vimRef.current.mode)) commitVim({ ...initialVimState, register: vimRef.current.register, lastFind: vimRef.current.lastFind })
 
     if (!input || event.target === input) return
 

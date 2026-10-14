@@ -299,6 +299,141 @@ describe('J and K jump ten rows', () => {
   })
 })
 
+describe('f, F, t and T', () => {
+  it('f and F land on the character, t and T stop short of it', () => {
+    expect(view('|hello world', 'fo')).toBe('hell|o world')
+    expect(view('hello wor|ld', 'Fo')).toBe('hello w|orld')
+    expect(view('|hello world', 'to')).toBe('hel|lo world')
+    expect(view('hello wor|ld', 'To')).toBe('hello wo|rld')
+  })
+
+  it('do not move when the character is not on the line', () => {
+    for (const keys of ['fz', 'Fz', 'tz', 'Tz']) expect(view('he|llo', keys)).toBe('he|llo')
+  })
+
+  it('a miss still leaves the layer idle', () => {
+    const session = new Session('|abc').press('fz')
+
+    expect(session.state.pending).toBe('')
+    expect(session.press('x').text).toBe('bc')
+  })
+
+  it('never type the character into the text', () => {
+    const session = new Session('|a x').press('fx')
+
+    expect(session.text).toBe('a x')
+    expect(session.passed).toEqual([])
+  })
+
+  it('count the matches: 3fa goes to the third a', () => {
+    expect(view('|x a a a a', '3fa')).toBe('x a a |a a')
+    expect(view('x a a a |a', '2Fa')).toBe('x a |a a a')
+    expect(view('|x a a a a', '3ta')).toBe('x a a| a a')
+    expect(view('x a a a |a', '2Ta')).toBe('x a a| a a')
+  })
+
+  it('stay put when the line has fewer matches than the count', () => {
+    expect(view('|x a a', '3fa')).toBe('|x a a')
+  })
+
+  it('are case sensitive, and take digits as characters', () => {
+    expect(view('|aAa', 'fA')).toBe('a|Aa')
+    expect(view('|ab', 'fA')).toBe('|ab')
+    expect(view('|a1b1', 'f1')).toBe('a|1b1')
+  })
+
+  it('take a space, punctuation, an uppercase letter, a umlaut and an astral character', () => {
+    expect(view('|a b', 'f ')).toBe('a| b')
+    expect(view('|a, b', 'f,')).toBe('a|, b')
+    expect(view('|a;b', 'f;')).toBe('a|;b')
+    expect(view('|abAB', 'fA')).toBe('ab|AB')
+    expect(view('|abüc', 'fü')).toBe('ab|üc')
+    expect(view('|a😀b', 'f😀')).toBe('a|😀b')
+    expect(view('|a😀b', 't😀')).toBe('|a😀b')
+    expect(view('a😀b|', 'T😀')).toBe('a😀|b')
+  })
+
+  it('wait through Shift, so fA works with the key events a browser sends', () => {
+    expect(view('|abAB', 'f<Shift>A')).toBe('ab|AB')
+  })
+
+  it('stay on their line', () => {
+    expect(view('|ab\ncd', 'fc')).toBe('|ab\ncd')
+    expect(view('ab\nc|d', 'Fb')).toBe('ab\nc|d')
+    expect(view('|ab\ncd', 'tc')).toBe('|ab\ncd')
+    expect(view('|\nab', 'fa')).toBe('|\nab')
+    expect(view('a|b\ncb', 'fb')).toBe('a|b\ncb')
+  })
+
+  it('wait for the character in the pending keys, and Escape cancels', () => {
+    const session = new Session('|abc').press('2f')
+
+    expect(session.state.pending).toBe('f')
+    expect(session.state.operatorCount).toBe(2)
+    expect(session.state.count).toBe(0)
+    expect(session.press('<Esc>').state.pending).toBe('')
+    expect(session.press('x').text).toBe('bc')
+  })
+
+  it('give up on the character when a named key arrives', () => {
+    const session = new Session('|a\nb').press('f<Enter>')
+
+    expect(session.state.pending).toBe('')
+    expect(session.selection).toEqual({ start: 0, end: 0 })
+  })
+
+  describe('; and ,', () => {
+    it('; repeats f and , goes back', () => {
+      expect(view('|a.b.c.d.e', 'f.;')).toBe('a.b|.c.d.e')
+      expect(view('|a.b.c.d.e', 'f.;;')).toBe('a.b.c|.d.e')
+      expect(view('|a.b.c.d.e', 'f.;;,')).toBe('a.b|.c.d.e')
+    })
+
+    it('; repeats F and , goes forward', () => {
+      expect(view('a.b.c.d.e|', 'F.')).toBe('a.b.c.d|.e')
+      expect(view('a.b.c.d.e|', 'F.;')).toBe('a.b.c|.d.e')
+      expect(view('a.b.c.d.e|', 'F.;,')).toBe('a.b.c.d|.e')
+    })
+
+    it('; after t skips a match right next to the cursor, so it keeps progressing', () => {
+      expect(view('|ab.cd.ef.g', 't.')).toBe('a|b.cd.ef.g')
+      expect(view('|ab.cd.ef.g', 't.;')).toBe('ab.c|d.ef.g')
+      expect(view('|ab.cd.ef.g', 't.;;')).toBe('ab.cd.e|f.g')
+    })
+
+    it('; after T skips an adjacent match too, and , repeats it the other way', () => {
+      expect(view('ab.cd.ef.|g', 'T.')).toBe('ab.cd.ef.|g')
+      expect(view('ab.cd.ef.|g', 'T.;')).toBe('ab.cd.|ef.g')
+      expect(view('ab.cd.ef.|g', 'T.;,')).toBe('ab.cd.e|f.g')
+    })
+
+    it(', after t is T and skips an adjacent match', () => {
+      expect(view('|ab.cd.ef.g', 't.;;,')).toBe('ab.cd.|ef.g')
+      expect(view('|ab.cd.ef.g', 't.;;,,')).toBe('ab.|cd.ef.g')
+    })
+
+    it('take a count', () => {
+      expect(view('|a.b.c.d', 'f.2;')).toBe('a.b.c|.d')
+    })
+
+    it('do nothing before any find, and remember a find that missed', () => {
+      expect(view('a|bc', ';')).toBe('a|bc')
+      expect(view('a|b.c', 'fz;')).toBe('a|b.c')
+      expect(new Session('a|b.c').press('f.').state.lastFind).toEqual({ kind: 'f', char: '.' })
+      expect(new Session('a|bc').press('fz').state.lastFind).toEqual({ kind: 'f', char: 'z' })
+    })
+
+    it('do not move when the repeat finds nothing', () => {
+      expect(view('|a.b', 'f.;')).toBe('a|.b')
+    })
+
+    it('; and , work as operator motions: d; uses the kind of the last find', () => {
+      expect(view('|a.b.c.d', 'f.d;')).toBe('a|c.d')
+      expect(view('a.b.c|.d', 'F.d,')).toBe('a.b|d')
+    })
+  })
+})
+
 describe('d', () => {
   it('dw deletes to the next word', () => {
     expect(view('|one two three', 'dw')).toBe('|two three')
@@ -409,6 +544,87 @@ describe('d', () => {
     const session = new Session('|abc').press('3d<Esc>x')
 
     expect(session.text).toBe('bc')
+  })
+})
+
+describe('operators with f, F, t and T', () => {
+  it('df deletes through the character and dt up to it', () => {
+    expect(view('|foo(bar) baz', 'dfb')).toBe('|ar) baz')
+    expect(view('|foo(bar) baz', 'dtb')).toBe('|bar) baz')
+  })
+
+  it('dF and dT leave the character itself: F and T are exclusive', () => {
+    expect(view('foo(bar|) baz', 'dF(')).toBe('foo|) baz')
+    expect(view('foo(bar|) baz', 'dT(')).toBe('foo(|) baz')
+  })
+
+  it('dtx right in front of x deletes one character, dTx right behind it nothing', () => {
+    expect(view('|ax', 'dtx')).toBe('|x')
+    expect(view('x|a', 'dTx')).toBe('x|a')
+  })
+
+  it('cf and ct delete and start typing', () => {
+    const through = new Session('|foo(bar)').press('cf(')
+
+    expect(through.text).toBe('bar)')
+    expect(through.mode).toBe('insert')
+
+    const until = new Session('|foo(bar)').press('ct(')
+
+    expect(until.text).toBe('(bar)')
+    expect(until.mode).toBe('insert')
+  })
+
+  it('yf yanks through the character and leaves the cursor', () => {
+    const session = new Session('|foo(bar)').press('yf(')
+
+    expect(session.text).toBe('foo(bar)')
+    expect(session.yanked).toEqual(['foo('])
+    expect(session.state.register.text).toBe('foo(')
+    expect(session.view).toBe('|foo(bar)')
+  })
+
+  it('yF moves the cursor to the start of what it yanked', () => {
+    const session = new Session('foo(bar|)').press('yF(')
+
+    expect(session.yanked).toEqual(['(bar'])
+    expect(session.view).toBe('foo|(bar)')
+  })
+
+  it('take a count before or after the operator', () => {
+    expect(view('|a-b-c-d', 'd2f-')).toBe('|c-d')
+    expect(view('|a-b-c-d', '2df-')).toBe('|c-d')
+    expect(view('|a-b-c-d-e', '2d2f-')).toBe('|e')
+    expect(view('|a-b-c-d-e', 'd2t-')).toBe('|-c-d-e')
+    expect(view('a-b-c-d|-e', 'd2F-')).toBe('a-b|-e')
+  })
+
+  it('show the pending operator and find in the status bar keys', () => {
+    const session = new Session('|abc').press('2d3f')
+
+    expect(session.state.pending).toBe('df')
+    expect(session.state.operatorCount).toBe(6)
+  })
+
+  it('cancel the operator when the character is missing', () => {
+    const session = new Session('|abc').press('dfz')
+
+    expect(session.text).toBe('abc')
+    expect(session.state.pending).toBe('')
+    expect(session.press('x').text).toBe('bc')
+    expect(view('|abc', 'cfz')).toBe('|abc')
+    expect(new Session('|abc').press('cfz').mode).toBe('normal')
+  })
+
+  it('cancel on Escape', () => {
+    const session = new Session('|abc').press('df<Esc>')
+
+    expect(session.state.pending).toBe('')
+    expect(session.press('x').text).toBe('bc')
+  })
+
+  it('stay on the line', () => {
+    expect(view('|ab\ncd', 'dfc')).toBe('|ab\ncd')
   })
 })
 
@@ -705,6 +921,52 @@ describe('visual mode', () => {
   })
 })
 
+describe('f, F, t and T in visual mode', () => {
+  it('f extends the selection through the character', () => {
+    expect(new Session('|one two three').press('vft').selection).toEqual({ start: 0, end: 5 })
+  })
+
+  it('t stops in front of the character', () => {
+    expect(new Session('|one two three').press('vtt').selection).toEqual({ start: 0, end: 4 })
+  })
+
+  it('F and T select backwards', () => {
+    expect(new Session('one two thre|e').press('vFt').selection).toEqual({ start: 8, end: 13 })
+    expect(new Session('one two thre|e').press('vTt').selection).toEqual({ start: 9, end: 13 })
+  })
+
+  it('take counts, and ; and , move the cursor end', () => {
+    expect(new Session('|a.b.c.d').press('v2f.').selection).toEqual({ start: 0, end: 4 })
+    expect(new Session('|a.b.c.d').press('vf.;').selection).toEqual({ start: 0, end: 4 })
+    expect(new Session('|a.b.c.d').press('vf.;,').selection).toEqual({ start: 0, end: 2 })
+  })
+
+  it('then act on the selection', () => {
+    expect(new Session('|one two three').press('vftd').text).toBe('wo three')
+  })
+
+  it('a miss keeps the selection and the mode', () => {
+    const session = new Session('|one two').press('vlfz')
+
+    expect(session.mode).toBe('visual')
+    expect(session.selection).toEqual({ start: 0, end: 2 })
+    expect(session.state.pending).toBe('')
+  })
+
+  it('Escape cancels the find and keeps the selection; a second Escape leaves', () => {
+    const session = new Session('|one two').press('vlf<Esc>')
+
+    expect(session.mode).toBe('visual')
+    expect(session.state.pending).toBe('')
+    expect(session.selection).toEqual({ start: 0, end: 2 })
+    expect(session.press('<Esc>').mode).toBe('normal')
+  })
+
+  it('stay on the line', () => {
+    expect(new Session('|ab\ncd').press('vfc').selection).toEqual({ start: 0, end: 1 })
+  })
+})
+
 describe('linewise visual mode', () => {
   it('V selects the whole line, including its line break', () => {
     const session = new Session('a\n|bc\nd').press('V')
@@ -784,6 +1046,38 @@ describe('linewise visual mode', () => {
 
     expect(session.text).toBe('abc')
     expect(session.mode).toBe('visual-line')
+  })
+
+  describe('f, F, t and T', () => {
+    it('move the cursor on its line and keep the selection on whole lines', () => {
+      const session = new Session('|one\ntwo').press('Vfe')
+
+      expect(session.mode).toBe('visual-line')
+      expect(session.selection).toEqual({ start: 0, end: 4 })
+      expect(session.view).toBe('on|e\ntwo')
+    })
+
+    it('the cursor keeps its column for the next row move', () => {
+      expect(new Session('|one\ntwo').press('Vfej').view).toBe('one\ntw|o')
+      expect(new Session('one\ntwo|').press('VFwk').view).toBe('o|ne\ntwo')
+    })
+
+    it('; and , repeat them', () => {
+      expect(new Session('|a.b.c').press('Vf.;').view).toBe('a.b|.c')
+      expect(new Session('|a.b.c').press('Vf.;,').view).toBe('a|.b.c')
+    })
+
+    it('a miss and Escape keep the mode', () => {
+      const session = new Session('|ab\ncd').press('Vfz')
+
+      expect(session.mode).toBe('visual-line')
+      expect(session.press('f<Esc>').mode).toBe('visual-line')
+      expect(session.selection).toEqual({ start: 0, end: 3 })
+    })
+
+    it('d deletes the lines the cursor ended up on', () => {
+      expect(new Session('|one\ntwo\nthree').press('Vfejd').text).toBe('three')
+    })
   })
 
   describe('d and x', () => {

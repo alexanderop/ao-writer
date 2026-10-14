@@ -1,4 +1,5 @@
 import { charLength, firstNonBlank, lineEnd, lineNumber, lineStart, lineStartOf, previousChar } from './lines.ts'
+import type { Find } from './state.ts'
 
 /**
 A motion maps a position to the position it lands on.
@@ -189,4 +190,43 @@ export function fileEnd(text: string, line: number): number {
   const target = line === 0 ? lineNumber(text, text.length) : line - 1
 
   return firstNonBlank(text, lineStartOf(text, target))
+}
+
+/**
+Where `f`, `F`, `t` or `T` lands: the `count`th match of the character on the line of `pos`, or null when the line has fewer.
+Repeating `t` or `T` with `;` or `,` skips a match right next to the cursor, so the cursor keeps progressing.
+*/
+export function findTarget(text: string, pos: number, find: Find, count: number, repeating: boolean): number | null {
+  const forward = find.kind === 'f' || find.kind === 't'
+  const till = find.kind === 't' || find.kind === 'T'
+  const start = lineStart(text, pos)
+  const end = lineEnd(text, pos)
+  let found = pos
+  let skipAdjacent = repeating && till && count === 1
+
+  for (let step = 0; step < count; step += 1) {
+    let match = forward ? text.indexOf(find.char, found + charLength(text, found)) : found <= start ? -1 : text.lastIndexOf(find.char, found - 1)
+
+    if (skipAdjacent) {
+      const adjacent = forward ? match === found + charLength(text, found) : match + find.char.length === found
+
+      if (match !== -1 && adjacent) match = forward ? text.indexOf(find.char, match + find.char.length) : match <= start ? -1 : text.lastIndexOf(find.char, match - 1)
+
+      skipAdjacent = false
+    }
+
+    if (match === -1 || match < start || match >= end) return null
+
+    found = match
+  }
+
+  switch (find.kind) {
+    case 'f':
+    case 'F':
+      return found
+    case 't':
+      return previousChar(text, found)
+    case 'T':
+      return found + find.char.length
+  }
 }

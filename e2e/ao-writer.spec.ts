@@ -354,6 +354,36 @@ test('vim keys: j and k move by wrapped row, not by paragraph', async ({ page })
   expect(await caretOf(page)).toBe(0)
 })
 
+test('vim keys: f finds a character, ; repeats it and dt. deletes up to a period', async ({ page }) => {
+  await startWriting(page, 'banana split. rest')
+  await enableVim(page)
+
+  const editor = page.getByTestId('editor')
+  const mode = page.getByTestId('vim-mode')
+
+  await page.keyboard.press('g')
+  await page.keyboard.press('g')
+  expect(await caretOf(page)).toBe(0)
+
+  // the status bar waits for the character, which does not land in the text
+  await page.keyboard.press('f')
+  await expect(mode).toHaveText('NORMAL f')
+  await page.keyboard.press('a')
+  await expect(mode).toHaveText('NORMAL')
+  expect(await caretOf(page)).toBe(1)
+  await expect(editor).toHaveValue('banana split. rest')
+
+  await page.keyboard.press(';')
+  expect(await caretOf(page)).toBe(3)
+
+  await page.keyboard.press('d')
+  await page.keyboard.press('t')
+  await expect(mode).toHaveText('NORMAL dt')
+  await page.keyboard.press('.')
+  await expect(editor).toHaveValue('ban. rest')
+  expect(await caretOf(page)).toBe(3)
+})
+
 test('vim keys: Ctrl+R is redo in normal mode, Escape still closes menus, and the setting turns off', async ({ page }) => {
   await startWriting(page, 'one two')
   await enableVim(page)

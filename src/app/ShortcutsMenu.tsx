@@ -11,6 +11,7 @@ const VIM_KEYS: readonly { readonly label: string; readonly keys: string }[] = [
   { label: 'Jump 10 rows down / up', keys: 'J K' },
   { label: 'Words', keys: 'w b e' },
   { label: 'Line start / first / end', keys: '0 ^ $' },
+  { label: 'Find on line, repeat', keys: 'f F t T ; ,' },
   { label: 'Top / bottom, line', keys: 'gg G' },
   { label: 'Delete / change / yank', keys: 'd c y' },
   { label: 'Whole line', keys: 'dd cc yy' },

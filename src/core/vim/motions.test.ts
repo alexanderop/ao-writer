@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { clampNormal, firstNonBlank, lineEnd, lineNumber, lineStart, lineStartOf } from './lines.ts'
-import { fileEnd, fileStart, left, lineDown, lineFirst, lineHome, lineLast, lineUp, repeat, right, runEnd, wordBack, wordEnd, wordForward } from './motions.ts'
+import { fileEnd, findTarget, fileStart, left, lineDown, lineFirst, lineHome, lineLast, lineUp, repeat, right, runEnd, wordBack, wordEnd, wordForward } from './motions.ts'
 
 /** Splits `text` at the `|` marker and returns the text without it and the marker's index. */
 function at(marked: string) {
@@ -224,5 +224,34 @@ describe('gg and G', () => {
   it('work on an empty document', () => {
     expect(fileStart('', 0)).toBe(0)
     expect(fileEnd('', 0)).toBe(0)
+  })
+})
+
+describe('findTarget', () => {
+  const found = (marked: string, kind: 'f' | 'F' | 't' | 'T', char: string, count = 1, repeating = false): string => {
+    const { text, pos } = at(marked)
+    const target = findTarget(text, pos, { kind, char }, count, repeating)
+
+    return target === null ? 'none' : `${text.slice(0, target)}|${text.slice(target)}`
+  }
+
+  it('finds the count-th match on the line, and nothing past the line', () => {
+    expect(found('|a.b.c', 'f', '.', 2)).toBe('a.b|.c')
+    expect(found('|a.b.c', 'f', '.', 3)).toBe('none')
+    expect(found('|a.\nb.', 'f', '.', 2)).toBe('none')
+    expect(found('a.\n|b', 'F', '.')).toBe('none')
+  })
+
+  it('does not match under the cursor', () => {
+    expect(found('|a.', 'f', 'a')).toBe('none')
+    expect(found('.|a', 'F', 'a')).toBe('none')
+  })
+
+  it('t and T repeated skip a match next to the cursor, f and F do not', () => {
+    expect(found('|a.b.c', 't', '.', 1, true)).toBe('a.|b.c')
+    expect(found('|a.b.c', 't', '.', 1, false)).toBe('|a.b.c')
+    expect(found('a.b.|c', 'T', '.', 1, true)).toBe('a.|b.c')
+    expect(found('a.b.|c', 'T', '.', 1, false)).toBe('a.b.|c')
+    expect(found('|a.b', 'f', '.', 1, true)).toBe('a|.b')
   })
 })

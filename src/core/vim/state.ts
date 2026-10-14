@@ -21,16 +21,28 @@ interface Register {
   readonly linewise: boolean
 }
 
+/** The four in-line find commands: `f` and `F` land on the character, `t` and `T` stop short of it; lowercase looks forward, uppercase back. */
+export type FindKind = 'f' | 'F' | 't' | 'T'
+
+/** A find as `;` and `,` repeat it. */
+export interface Find {
+  readonly kind: FindKind
+  /** The character searched for: one grapheme, possibly more than one UTF-16 unit. */
+  readonly char: string
+}
+
 /** Everything the layer remembers between two keys. */
 export interface VimState {
   readonly mode: Mode
-  /** Keys that wait for more: an operator (`d`, `c`, `y`), `g`, or both (`dg`). */
+  /** Keys that wait for more: an operator (`d`, `c`, `y`), `g`, or both (`dg`); a find waits for its character (`f`, `dt`). */
   readonly pending: string
   /** The count typed so far; zero when there is none. */
   readonly count: number
-  /** The count typed before an operator, so `2d3w` can multiply to six words. */
+  /** The count typed before an operator, so `2d3w` can multiply to six words; a find that waits for its character takes the whole count, so the status bar reads `3f`. */
   readonly operatorCount: number
   readonly register: Register
+  /** The last `f`, `F`, `t` or `T`, for `;` and `,`. */
+  readonly lastFind: Find | null
   /** Where the visual selection started. */
   readonly visualAnchor: number
   /** The cursor in linewise visual mode, whose selection covers whole lines and so cannot tell where the cursor is; charwise visual mode reads it from the selection. */
@@ -45,6 +57,7 @@ export const initialVimState: VimState = {
   count: 0,
   operatorCount: 0,
   register: { text: '', linewise: false },
+  lastFind: null,
   visualAnchor: 0,
   visualCursor: 0,
   goalX: null,
