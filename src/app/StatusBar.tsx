@@ -5,7 +5,7 @@ import { formatDuration } from '../core/text/counts.ts'
 import type { TextCounts } from '../core/text/counts.ts'
 import { shortcutLabel } from '../core/shortcuts.ts'
 import type { ActionId } from '../core/shortcuts.ts'
-import { countsAtom, selectionCountsAtom } from '../features/editor/atoms.ts'
+import { countsAtom, selectionCountsAtom, vimAtom } from '../features/editor/atoms.ts'
 import { saveStatusAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { nextCounter } from '../features/settings/settings.ts'
@@ -45,7 +45,10 @@ export function StatusBar({ isMac, run }: StatusBarProps) {
   const counts = useAtomValue(countsAtom)
   const selected = useAtomValue(selectionCountsAtom)
   const saveStatus = useAtomValue(saveStatusAtom)
+  const vim = useAtomValue(vimAtom)
   const shown = selected ?? counts
+  // the keys Vim is still waiting on, such as 2d3
+  const typedKeys = `${vim.operatorCount > 0 ? vim.operatorCount : ''}${vim.pending}${vim.count > 0 ? vim.count : ''}`
 
   return (
     <footer className="chrome absolute inset-x-0 bottom-0 z-20 flex h-11 items-center justify-between gap-3 bg-gradient-to-t from-paper from-60% to-transparent px-4">
@@ -65,6 +68,12 @@ export function StatusBar({ isMac, run }: StatusBarProps) {
         <span className="text-ink-faint" data-testid="save-status" data-state={saveStatus}>
           {SAVE_LABEL[saveStatus]}
         </span>
+        {settings.vim ? (
+          <span className="font-bold tracking-wider text-ink-faint" data-testid="vim-mode" data-mode={vim.mode}>
+            {vim.mode.toUpperCase()}
+            {typedKeys === '' ? '' : ` ${typedKeys}`}
+          </span>
+        ) : null}
       </div>
       <div className="flex items-center gap-0.5">
         <ToolButton keepFocus label="Focus mode" shortcut={shortcutLabel('focus', isMac)} pressed={settings.focus} testId="toggle-focus" onClick={() => run('focus')}>

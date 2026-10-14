@@ -177,3 +177,146 @@ for (const backend of ['OPFS', 'IndexedDB'] as const) {
     await expect(page.getByTestId('document-name')).toHaveText('Welcome to Margin')
   })
 }
+
+/** Switches Vim keybindings on in the options menu and puts the focus back in the editor. */
+async function enableVim(page: Page): Promise<void> {
+  await page.getByTestId('options').click()
+  await page.getByTestId('option-vim').check()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('options-menu')).toHaveCount(0)
+  await page.getByTestId('editor').click()
+}
+
+const caretOf = (page: Page): Promise<number> => page.getByTestId('editor').evaluate((element) => (element instanceof HTMLTextAreaElement ? element.selectionStart : -1))
+
+test('vim keys: normal mode edits without typing, insert mode types, Escape returns', async ({ page }) => {
+  await startWriting(page, 'alpha beta\ngamma delta\nepsilon')
+  await expect(page.getByTestId('vim-mode')).toHaveCount(0)
+
+  await enableVim(page)
+
+  const editor = page.getByTestId('editor')
+  const mode = page.getByTestId('vim-mode')
+
+  await expect(mode).toHaveText('NORMAL')
+  await expect(page.getByTestId('vim-cursor')).toHaveCount(1)
+
+  await page.keyboard.press('g')
+  await page.keyboard.press('g')
+  await page.keyboard.press('x')
+  await expect(editor).toHaveValue('lpha beta\ngamma delta\nepsilon')
+
+  // a letter with no meaning in normal mode must not land in the text
+  await page.keyboard.press('q')
+  await page.keyboard.press('z')
+  await expect(editor).toHaveValue('lpha beta\ngamma delta\nepsilon')
+
+  await page.keyboard.press('i')
+  await expect(mode).toHaveText('INSERT')
+  await expect(page.getByTestId('vim-cursor')).toHaveCount(0)
+  await page.keyboard.type('XY')
+  await expect(editor).toHaveValue('XYlpha beta\ngamma delta\nepsilon')
+
+  await page.keyboard.press('Escape')
+  await expect(mode).toHaveText('NORMAL')
+  await expect(page.getByTestId('vim-cursor')).toHaveText('Y')
+
+  // dd removes the line and u brings it back
+  await page.keyboard.press('d')
+  await page.keyboard.press('d')
+  await expect(editor).toHaveValue('gamma delta\nepsilon')
+  await page.keyboard.press('u')
+  await expect(editor).toHaveValue('XYlpha beta\ngamma delta\nepsilon')
+
+  // visual mode selects, and the indicator follows
+  await page.keyboard.press('v')
+  await page.keyboard.press('e')
+  await expect(mode).toHaveText('VISUAL')
+  await expect.poll(() => editor.evaluate((element) => (element instanceof HTMLTextAreaElement ? element.value.slice(element.selectionStart, element.selectionEnd) : ''))).toBe('XYlpha')
+  await page.keyboard.press('d')
+  await expect(editor).toHaveValue(' beta\ngamma delta\nepsilon')
+  await expect(mode).toHaveText('NORMAL')
+
+  // yank a line and paste it below it
+  await page.keyboard.press('y')
+  await page.keyboard.press('y')
+  await page.keyboard.press('p')
+  await expect(editor).toHaveValue(' beta\n beta\ngamma delta\nepsilon')
+
+  // a count waits in the status bar until the command is complete
+  await page.keyboard.press('2')
+  await expect(mode).toHaveText('NORMAL 2')
+  await page.keyboard.press('d')
+  await page.keyboard.press('d')
+  await expect(editor).toHaveValue(' beta\nepsilon')
+  await expect(mode).toHaveText('NORMAL')
+
+  // the cursor sits on epsilon after 2dd; o opens a line below it, and Enter in insert mode still continues a list
+  await page.keyboard.press('o')
+  await expect(mode).toHaveText('INSERT')
+  await page.keyboard.type('- one')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('two')
+  await expect(editor).toHaveValue(' beta\nepsilon\n- one\n- two')
+
+  // a new document starts in normal mode, even when the last one was left in insert mode
+  await page.keyboard.press('Alt+Shift+N')
+  await expect(editor).toHaveValue('')
+  await expect(mode).toHaveText('NORMAL')
+})
+
+test('vim keys: j and k move by wrapped row, not by paragraph', async ({ page }) => {
+  await startWriting(page, 'lorem ipsum dolor sit amet '.repeat(10).trim())
+  await enableVim(page)
+
+  await page.keyboard.press('g')
+  await page.keyboard.press('g')
+  expect(await caretOf(page)).toBe(0)
+
+  await page.keyboard.press('j')
+
+  // one row down is about one column-width of text further, well inside the same paragraph
+  const second = await caretOf(page)
+
+  expect(second).toBeGreaterThan(40)
+  expect(second).toBeLessThan(90)
+
+  await page.keyboard.press('j')
+  expect(await caretOf(page)).toBeGreaterThan(second + 40)
+
+  await page.keyboard.press('k')
+  await page.keyboard.press('k')
+  expect(await caretOf(page)).toBe(0)
+})
+
+test('vim keys: Ctrl+R is redo in normal mode, Escape still closes menus, and the setting turns off', async ({ page }) => {
+  await startWriting(page, 'one two')
+  await enableVim(page)
+
+  const editor = page.getByTestId('editor')
+
+  await page.keyboard.press('g')
+  await page.keyboard.press('g')
+  await page.keyboard.press('x')
+  await expect(editor).toHaveValue('ne two')
+  await page.keyboard.press('u')
+  await expect(editor).toHaveValue('one two')
+  await page.keyboard.press('Control+R')
+  await expect(editor).toHaveValue('ne two')
+  await expect(page.getByTestId('preview')).toHaveCount(0)
+
+  // a menu takes the Escape, not the editor
+  await page.getByTestId('options').click()
+  await expect(page.getByTestId('options-menu')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('options-menu')).toHaveCount(0)
+
+  await page.getByTestId('options').click()
+  await page.getByTestId('option-vim').uncheck()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('vim-mode')).toHaveCount(0)
+  await editor.click()
+  await page.keyboard.press('ControlOrMeta+A')
+  await page.keyboard.type('xyz')
+  await expect(editor).toHaveValue('xyz')
+})

@@ -1,11 +1,20 @@
+import { Schema } from 'effect'
 import { describe, expect, it } from 'vitest'
 
-import { defaultSettings, FONT_SIZE, nextCounter, resizedFont, styleOptions, syntaxOptions } from './settings.ts'
+import { defaultSettings, FONT_SIZE, nextCounter, resizedFont, Settings, styleOptions, syntaxOptions } from './settings.ts'
 
 describe('settings', () => {
   it('follows the system theme on first use', () => {
     expect(defaultSettings(true).theme).toBe('dark')
     expect(defaultSettings(false).theme).toBe('light')
+  })
+
+  it('starts with Vim keys off, and reads settings saved before they existed', () => {
+    const { vim, ...saved } = defaultSettings(false)
+
+    expect(vim).toBe(false)
+    expect(Schema.decodeUnknownSync(Settings)(saved).vim).toBe(false)
+    expect(Schema.decodeUnknownSync(Settings)({ ...saved, vim: true }).vim).toBe(true)
   })
 
   it('steps the text size within bounds', () => {

@@ -271,6 +271,11 @@ body {
   opacity: 0.25;
 }
 
+/* Vim's block cursor: the character under it inverted, or one empty cell at a line end; the real caret hides */
+.editor-input[data-vim='block'] {
+  caret-color: transparent;
+}
+
 /* Markdown styling in the text itself: weight and colour only, never size, so the layers stay aligned */
 .editor-highlight .md-mark,
 .editor-highlight .md-list-mark,
@@ -373,6 +378,23 @@ body {
 .editor-highlight .style-redundancy {
   text-decoration-style: dashed;
   text-decoration-color: var(--style-redundancy);
+}
+
+/* After the styling rules above, so the block wins over a part-of-speech colour */
+.editor-highlight .vim-cursor {
+  background: var(--accent);
+  color: var(--paper);
+  border-radius: 1px;
+  text-decoration: none;
+}
+
+/* Zero width in the flow, so it never changes where the text wraps; it still paints one cell wide, as tall as a character's box */
+.editor-highlight .vim-cursor-eol {
+  display: inline-block;
+  width: 1ch;
+  height: 1.3em;
+  margin-right: -1ch;
+  vertical-align: text-bottom;
 }
 
 /* Preview: rendered Markdown in the same typeface */

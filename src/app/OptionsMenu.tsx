@@ -11,7 +11,7 @@ import { Button } from '#/shared/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '#/shared/ui/popover'
 
 interface BooleanKey {
-  readonly key: 'nouns' | 'verbs' | 'adjectives' | 'adverbs' | 'conjunctions' | 'fillers' | 'cliches' | 'redundancies' | 'typewriter'
+  readonly key: 'nouns' | 'verbs' | 'adjectives' | 'adverbs' | 'conjunctions' | 'fillers' | 'cliches' | 'redundancies' | 'typewriter' | 'vim'
   readonly label: string
   readonly swatch?: string
 }
@@ -113,6 +113,9 @@ export function OptionsMenu() {
             onChange={(focusScope) => patch({ focusScope, focus: true })}
           />
           <CheckRow row={{ key: 'typewriter', label: 'Typewriter mode' }} settings={settings} onToggle={toggle} />
+        </Section>
+        <Section title="Keys">
+          <CheckRow row={{ key: 'vim', label: 'Vim keybindings' }} settings={settings} onToggle={toggle} />
         </Section>
         <Section title="Syntax">
           {SYNTAX_ROWS.map((row) => (

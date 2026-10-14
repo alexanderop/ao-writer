@@ -25,7 +25,7 @@ pnpm preview      # serve the build on :5190
 | Command | What it does |
 | --- | --- |
 | `pnpm check` | typecheck, oxlint (zero warnings), Vitest, knip |
-| `pnpm test` | unit tests (tagger accuracy, focus ranges, Markdown, storage, shortcuts) |
+| `pnpm test` | unit tests (tagger accuracy, focus ranges, Markdown, storage, shortcuts, Vim keys) |
 | `pnpm e2e` | Playwright tests against the dev server (installs nothing; run `pnpm exec playwright install chromium` once) |
 | `pnpm lint` | `oxlint --deny-warnings` with the anti-slop rules in `tools/oxlint/anti-slop` |
 
@@ -55,6 +55,34 @@ for themselves (Cmd+1..6 and Cmd+L in Chrome, for example), so headings, lists a
 | Link | Cmd+K | Ctrl+K |
 | Mark task completed | Cmd+Alt+X | Ctrl+Alt+X |
 
+## Vim keybindings
+
+Optional and off by default. Switch them on under Options, Keys; the setting is saved with the others. The status
+bar then shows the mode (`NORMAL`, `INSERT` or `VISUAL`, plus any count or operator still waiting for its motion),
+normal and visual mode draw a block cursor, and every new or switched document starts in normal mode. Edits go
+through the same path as typing, so the browser's own undo keeps working.
+
+| Keys | What they do |
+| --- | --- |
+| `h` `j` `k` `l`, arrows | Left, down, up, right. `j` and `k` move by wrapped row, like `gj` and `gk`, and keep their column across rows |
+| `w` `b` `e` | Word forward, word back, end of word (a run of punctuation is a word, and so is an empty line) |
+| `0` `^` `$` | Start of line, first non-blank, end of line |
+| `gg` `G` | First and last line; with a count, that line (`3G`) |
+| `2w` `3l` `5j` | Counts work for motions, for operators (`2dd`, `d3w`) and for `p` |
+| `d` `c` `y` + motion | Delete, change (delete and insert), yank; `dd` `cc` `yy` act on lines, `dw` `cw` `d$` `dj` on a range |
+| `x` `D` `C` `s` `S` `Y` | `dl`, `d$`, `c$`, `cl`, `cc`, `yy` |
+| `p` `P` | Paste after or before the cursor; a yanked line is pasted as a line |
+| `i` `a` `I` `A` `o` `O` | Insert before or after the cursor, at the first non-blank or the end of the line, on a new line below or above |
+| `v` | Visual mode (characters). Motions extend the selection; `d` `x` `c` `y` act on it; `o` swaps its ends; `v` or Esc leaves |
+| `u`, Ctrl+R | Undo, redo (the browser's history) |
+| Esc, Ctrl+[ | Back to normal mode |
+
+Yanks are also written to the system clipboard when the browser allows it. In normal and visual mode no letter
+types into the document, but Cmd/Ctrl chords (Bold, Preview, copy, paste) still work. Ctrl+R is redo in normal and
+visual mode and the preview shortcut in insert mode (on a Mac the preview stays on Cmd+R). With an operator, `j`
+and `k` act on whole logical lines, as in Vim. Not included: `.` repeat, text objects, `/` search, named registers,
+`:` commands, macros, linewise visual mode (`V`).
+
 Other behaviour: Enter continues lists, task lists and quotes (and leaves them on an empty item); typewriter
 mode keeps the caret line in the middle of the screen; the status bar counter cycles through words, characters,
 reading time (220 wpm) and speaking time (150 wpm) when you click it, and counts the selection while text is
@@ -65,10 +93,13 @@ the last keystroke (and when the tab hides).
 
 - **Editor**: a `<textarea>` (it owns input, selection, IME and undo) over a transparent-text highlight layer
   with identical font metrics. The layer is built from pure functions in `src/core`; the Markdown styling
-  never changes size, only weight and colour, so the two layers stay aligned.
+  never changes size, only weight and colour, so the two layers stay aligned. Vim mode is a layer in front of
+  the textarea's key handler: `core/vim` turns a key into a result (move, edit, undo, ...) and `app/vim-input.ts`
+  applies it; wrapped-row moves are measured on the highlight layer in `app/vim-rows.ts`.
 - **`src/core`**: framework-free TypeScript with unit tests: `pos/` (lexicon + suffix rules + context rules
   tagger), `style/` (word lists and a phrase matcher), `markdown/` (live-styling ranges, safe HTML renderer,
-  format edits), `text/` (counts, sentence and paragraph detection), `shortcuts.ts`.
+  format edits), `text/` (counts, sentence and paragraph detection), `vim/` (key → result: motions,
+  operators, registers; no DOM), `shortcuts.ts`.
 - **`src/features`**: Effect 4 services and atoms. `library/storage.ts` is the `DocumentStorage` service (OPFS
   layer with an IndexedDB fallback and an in-memory layer for tests), `library/atoms.ts` holds the documents,
   the debounced autosave and the library actions, `settings/` is the persisted settings atom.

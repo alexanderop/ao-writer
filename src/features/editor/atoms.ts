@@ -4,6 +4,8 @@ import { buildSegments } from '../../core/editor/annotate.ts'
 import { renderMarkdown } from '../../core/markdown/render.ts'
 import { countText } from '../../core/text/counts.ts'
 import { focusRange } from '../../core/text/focus.ts'
+import { initialVimState } from '../../core/vim/state.ts'
+import type { VimState } from '../../core/vim/state.ts'
 import { settingsAtom } from '../settings/atoms.ts'
 import { styleOptions, syntaxOptions } from '../settings/settings.ts'
 
@@ -15,6 +17,9 @@ export const selectionAtom = Atom.make({ start: 0, end: 0 }).pipe(Atom.keepAlive
 
 /** True while the writer is typing, so the chrome can fade away. */
 export const typingAtom = Atom.make(false).pipe(Atom.keepAlive)
+
+/** The Vim layer's mode, pending keys and register; reset whenever Vim is switched or the document changes. */
+export const vimAtom = Atom.make<VimState>(initialVimState).pipe(Atom.keepAlive)
 
 /** The whole document's counts. */
 export const countsAtom = Atom.make((get) => countText(get(textAtom)))

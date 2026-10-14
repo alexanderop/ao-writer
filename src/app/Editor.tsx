@@ -4,15 +4,44 @@ import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 
 import { continueList } from '../core/markdown/format.ts'
 import type { Segment } from '../core/editor/annotate.ts'
-import { segmentsAtom, selectionAtom, textAtom, typingAtom } from '../features/editor/atoms.ts'
+import { charLength, clampNormal } from '../core/vim/lines.ts'
+import { initialVimState } from '../core/vim/state.ts'
+import type { VimState } from '../core/vim/state.ts'
+import { cursorOf } from '../core/vim/vim.ts'
+import { segmentsAtom, selectionAtom, textAtom, typingAtom, vimAtom } from '../features/editor/atoms.ts'
 import { activeIdAtom, autosaveAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { applyEdit, editorInputAtom } from './editor-input.ts'
+import { runVimKey } from './vim-input.ts'
+import { visualRows } from './vim-rows.ts'
 
 /** The space the caret keeps from the top and bottom edge while it scrolls into view. */
 const CARET_MARGIN = 96
 
-function renderSegments(text: string, segments: readonly Segment[], caret: number, markerRef: { current: HTMLSpanElement | null }): ReactNode[] {
+/** A segment's text with the block cursor cut out of it: the character under the cursor, or a one-cell block at a line end. */
+function cursorNodes(text: string, segment: Segment, index: number, cursor: number): ReactNode[] {
+  const className = segment.className === '' ? undefined : segment.className
+  const char = text.slice(cursor, cursor + charLength(text, cursor))
+  const after = text.slice(cursor + char.length, segment.end)
+
+  return [
+    <span key={`${index}-before`} className={className}>
+      {text.slice(segment.start, cursor)}
+    </span>,
+    char === '' ? (
+      <span key={`${index}-cursor`} className="vim-cursor vim-cursor-eol" data-testid="vim-cursor" />
+    ) : (
+      <span key={`${index}-cursor`} className={className === undefined ? 'vim-cursor' : `${className} vim-cursor`} data-testid="vim-cursor">
+        {char}
+      </span>
+    ),
+    <span key={`${index}-after`} className={className}>
+      {after}
+    </span>,
+  ]
+}
+
+function renderSegments(text: string, segments: readonly Segment[], caret: number, cursor: number | null, markerRef: { current: HTMLSpanElement | null }): ReactNode[] {
   const nodes: ReactNode[] = []
   let placed = false
 
@@ -31,6 +60,12 @@ function renderSegments(text: string, segments: readonly Segment[], caret: numbe
       placed = true
     }
 
+    if (cursor !== null && cursor >= segment.start && cursor < segment.end) {
+      nodes.push(...cursorNodes(text, segment, index, cursor))
+
+      return
+    }
+
     nodes.push(
       <span key={index} className={segment.className === '' ? undefined : segment.className}>
         {text.slice(segment.start, segment.end)}
@@ -39,6 +74,9 @@ function renderSegments(text: string, segments: readonly Segment[], caret: numbe
   })
 
   if (!placed) nodes.push(marker)
+
+  // a cursor behind the last character (an empty last line) has no segment to cut it out of
+  if (cursor !== null && cursor >= text.length) nodes.push(<span key="vim-end" className="vim-cursor vim-cursor-eol" data-testid="vim-cursor" />)
 
   return nodes
 }
@@ -53,14 +91,18 @@ export function Editor() {
   const settings = useAtomValue(settingsAtom)
   const activeId = useAtomValue(activeIdAtom)
   const selection = useAtomValue(selectionAtom)
+  const vim = useAtomValue(vimAtom)
   const setText = useAtomSet(textAtom)
   const setSelectionAtom = useAtomSet(selectionAtom)
   const setTyping = useAtomSet(typingAtom)
   const setInput = useAtomSet(editorInputAtom)
+  const setVim = useAtomSet(vimAtom)
   const autosave = useAtomSet(autosaveAtom)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const markerRef = useRef<HTMLSpanElement | null>(null)
+  const highlightRef = useRef<HTMLDivElement | null>(null)
+  const vimRef = useRef<VimState>(initialVimState)
   const lastSelection = useRef({ start: 0, end: 0 })
 
   // publish the selection only when it changed, so a caret that did not move does not repaint the layer
@@ -74,18 +116,40 @@ export function Editor() {
     [setSelectionAtom],
   )
 
+  // the ref is what the next key reads, the atom is what the status bar and the cursor draw
+  const commitVim = useCallback(
+    (next: VimState): void => {
+      vimRef.current = next
+      setVim(next)
+    },
+    [setVim],
+  )
+
   // follow every selection change, including the ones made from code (format actions, document switches)
   useEffect(() => {
     const onSelectionChange = (): void => {
       const input = inputRef.current
 
-      if (input && document.activeElement === input) setSelection({ start: input.selectionStart, end: input.selectionEnd })
+      if (!input || document.activeElement !== input) return
+
+      // a click can land behind the last character of a line, where normal mode has no cursor
+      if (settings.vim && vimRef.current.mode === 'normal' && input.selectionStart === input.selectionEnd) {
+        const caret = clampNormal(input.value, input.selectionStart)
+
+        if (caret !== input.selectionStart) {
+          input.setSelectionRange(caret, caret)
+
+          return
+        }
+      }
+
+      setSelection({ start: input.selectionStart, end: input.selectionEnd })
     }
 
     document.addEventListener('selectionchange', onSelectionChange)
 
     return () => document.removeEventListener('selectionchange', onSelectionChange)
-  }, [setSelection])
+  }, [setSelection, settings.vim])
 
   useEffect(() => {
     const input = inputRef.current
@@ -102,6 +166,20 @@ export function Editor() {
     setSelection({ start: 0, end: 0 })
     scrollRef.current?.scrollTo({ top: 0 })
   }, [activeId, setSelection])
+
+  // a new document, and switching Vim on, start in normal mode
+  useEffect(() => {
+    const input = inputRef.current
+
+    commitVim(initialVimState)
+
+    if (settings.vim && input) {
+      const caret = clampNormal(input.value, input.selectionStart)
+
+      input.setSelectionRange(caret, caret)
+      setSelection({ start: caret, end: caret })
+    }
+  }, [activeId, settings.vim, commitVim, setSelection])
 
   // keep the caret in view; typewriter mode keeps it in the middle
   useLayoutEffect(() => {
@@ -129,13 +207,27 @@ export function Editor() {
 
     setText(value)
     setSelection({ start: selectionStart, end: selectionEnd })
-    setTyping(true)
+
+    // edits made by Vim commands are not typing, so the chrome and its mode label stay
+    if (!settings.vim || vimRef.current.mode === 'insert') setTyping(true)
 
     if (activeId !== null) autosave({ id: activeId, text: value })
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     const input = event.currentTarget
+
+    if (settings.vim && !event.nativeEvent.isComposing && !event.defaultPrevented && highlightRef.current) {
+      const next = runVimKey(input, event, vimRef.current, visualRows(highlightRef.current, input.value))
+
+      if (next !== null) {
+        event.preventDefault()
+        commitVim(next)
+        setSelection({ start: input.selectionStart, end: input.selectionEnd })
+
+        return
+      }
+    }
 
     if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return
 
@@ -155,6 +247,9 @@ export function Editor() {
 
     const scroller = event.currentTarget
 
+    // a click moves the caret on its own, which ends a visual selection
+    if (vimRef.current.mode === 'visual') commitVim({ ...initialVimState, register: vimRef.current.register })
+
     if (!input || event.target === input) return
 
     // leave the scrollbar alone
@@ -171,18 +266,21 @@ export function Editor() {
   }
 
 
+  const vimCursor = settings.vim && vim.mode !== 'insert' ? cursorOf(vim, text, selection) : null
+
   return (
     <div ref={scrollRef} className="editor-scroll h-full overflow-y-auto" data-testid="editor-scroll" onMouseDown={onPageMouseDown}>
       <div className="editor-column" data-typewriter={settings.typewriter} data-testid="editor-column">
         <div className="editor-stack">
-          <div className="editor-highlight" aria-hidden data-testid="highlight">
-            {renderSegments(text, segments, selection.end, markerRef)}
+          <div ref={highlightRef} className="editor-highlight" aria-hidden data-testid="highlight">
+            {renderSegments(text, segments, selection.end, vimCursor, markerRef)}
             {'​'}
           </div>
           <textarea
             ref={inputRef}
             className="editor-input"
             data-editor-input
+            data-vim={vimCursor === null ? undefined : 'block'}
             data-testid="editor"
             aria-label="Document text"
             value={text}

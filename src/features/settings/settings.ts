@@ -1,4 +1,4 @@
-import { Schema } from 'effect'
+import { Effect, Schema } from 'effect'
 
 import type { StyleOptions, SyntaxOptions } from '../../core/editor/annotate.ts'
 
@@ -19,6 +19,8 @@ export const Settings = Schema.Struct({
   focus: Schema.Boolean,
   focusScope: Schema.Literals(['sentence', 'paragraph']),
   typewriter: Schema.Boolean,
+  // settings saved before Vim keys existed have no such key; they read as off
+  vim: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   syntax: Schema.Boolean,
   nouns: Schema.Boolean,
   verbs: Schema.Boolean,
@@ -50,6 +52,7 @@ export function defaultSettings(prefersDark: boolean): Settings {
     focus: false,
     focusScope: 'sentence',
     typewriter: false,
+    vim: false,
     syntax: false,
     nouns: true,
     verbs: true,
