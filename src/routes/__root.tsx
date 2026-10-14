@@ -18,7 +18,7 @@ export const Route = createRootRoute({
       { name: 'description', content: 'A quiet Markdown writer for the browser.' },
     ],
     links: [
-      { rel: 'preload', href: '/fonts/iAWriterDuoS-Regular.woff2', as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' },
+      { rel: 'preload', href: `${import.meta.env.BASE_URL}fonts/iAWriterDuoS-Regular.woff2`, as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' },
       { rel: 'stylesheet', href: appCss },
     ],
   }),

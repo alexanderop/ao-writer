@@ -6,6 +6,8 @@ import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 const config = defineConfig({
+  // GitHub Pages serves the app under /ao-writer/; the workflow sets BASE_PATH, and the router basepath follows it
+  base: process.env.BASE_PATH ?? '/',
   resolve: { tsconfigPaths: true },
   // fixed port: fail loudly instead of drifting to another port a tool won't find
   server: { port: 5190, strictPort: true },
