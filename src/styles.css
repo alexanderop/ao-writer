@@ -1,0 +1,527 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Typefaces: iA Writer Duo, Mono and Quattro (SIL OFL 1.1, see public/fonts/LICENSE.md) */
+@font-face {
+  font-family: 'iA Writer Duo';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/iAWriterDuoS-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'iA Writer Duo';
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  src: url('/fonts/iAWriterDuoS-Italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'iA Writer Duo';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/iAWriterDuoS-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'iA Writer Duo';
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+  src: url('/fonts/iAWriterDuoS-BoldItalic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'iA Writer Mono';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/iAWriterMonoS-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'iA Writer Mono';
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  src: url('/fonts/iAWriterMonoS-Italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'iA Writer Mono';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/iAWriterMonoS-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'iA Writer Mono';
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+  src: url('/fonts/iAWriterMonoS-BoldItalic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'iA Writer Quattro';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/iAWriterQuattroS-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'iA Writer Quattro';
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  src: url('/fonts/iAWriterQuattroS-Italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'iA Writer Quattro';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/iAWriterQuattroS-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'iA Writer Quattro';
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+  src: url('/fonts/iAWriterQuattroS-BoldItalic.woff2') format('woff2');
+}
+
+/* Palette. Light is warm paper, dark is a deep blue-grey. */
+:root {
+  --paper: #f8f5ee;
+  --panel: #f1ede2;
+  --ink: #2b2a27;
+  --ink-soft: #6e6a60;
+  --ink-faint: #aaa595;
+  --rule: #e5e0d2;
+  --accent: #3b7a68;
+  --selection: rgb(59 122 104 / 0.22);
+  --code-bg: rgb(80 62 30 / 0.07);
+
+  --pos-noun: #4d7bb8;
+  --pos-verb: #c25a43;
+  --pos-adj: #4e9158;
+  --pos-adv: #8d63b3;
+  --pos-conj: #b38a1e;
+
+  --style-filler: #d49a1c;
+  --style-cliche: #cf5b4c;
+  --style-redundancy: #8d63b3;
+}
+
+.dark {
+  --paper: #171c25;
+  --panel: #1d232d;
+  --ink: #d8dde5;
+  --ink-soft: #97a0ae;
+  --ink-faint: #5d6675;
+  --rule: #2a3240;
+  --accent: #7fc4ae;
+  --selection: rgb(127 196 174 / 0.25);
+  --code-bg: rgb(150 170 200 / 0.1);
+
+  --pos-noun: #7fa9de;
+  --pos-verb: #ee8a74;
+  --pos-adj: #86c88e;
+  --pos-adv: #bb98df;
+  --pos-conj: #dbbb5c;
+
+  --style-filler: #e3b24a;
+  --style-cliche: #ee8272;
+  --style-redundancy: #bb98df;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-panel: var(--panel);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --color-pos-noun: var(--pos-noun);
+  --color-pos-verb: var(--pos-verb);
+  --color-pos-adj: var(--pos-adj);
+  --color-pos-adv: var(--pos-adv);
+  --color-pos-conj: var(--pos-conj);
+  --font-sans: 'iA Writer Quattro', ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-typeface='duo'] {
+  --font-writer: 'iA Writer Duo', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+[data-typeface='mono'] {
+  --font-writer: 'iA Writer Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+[data-typeface='quattro'] {
+  --font-writer: 'iA Writer Quattro', ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  overflow: hidden;
+}
+
+.app {
+  --font-size: 18px;
+  background: var(--paper);
+  color: var(--ink);
+  transition: background-color 0.3s ease;
+}
+
+/* The chrome (top bar, status bar) fades while typing and returns on mouse move */
+.chrome {
+  transition: opacity 0.6s ease;
+}
+
+.app[data-typing='true'] .chrome:not(:hover, :focus-within) {
+  opacity: 0;
+}
+
+/* Editor: a transparent textarea over a highlight layer with the same text metrics */
+.editor-scroll {
+  container-type: size;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+
+.editor-column {
+  box-sizing: content-box;
+  width: min(100% - 4rem, 64ch);
+  margin: 0 auto;
+  padding-block: 7rem 40cqh;
+  font-family: var(--font-writer);
+  font-size: var(--font-size);
+  line-height: 1.7;
+}
+
+.editor-column[data-typewriter='true'] {
+  padding-block: 50cqh;
+}
+
+.editor-stack {
+  position: relative;
+  display: grid;
+}
+
+.editor-highlight,
+.editor-input {
+  grid-area: 1 / 1;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  tab-size: 4;
+  font-kerning: none;
+  font-variant-ligatures: none;
+}
+
+.editor-highlight {
+  color: var(--ink);
+  pointer-events: none;
+  user-select: none;
+}
+
+.editor-input {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--accent);
+  outline: none;
+}
+
+.editor-input::selection {
+  background: var(--selection);
+  -webkit-text-fill-color: transparent;
+}
+
+.editor-input::placeholder {
+  color: var(--ink-faint);
+  -webkit-text-fill-color: var(--ink-faint);
+}
+
+.editor-highlight span {
+  transition: opacity 0.4s ease;
+}
+
+.editor-highlight .dim {
+  opacity: 0.25;
+}
+
+/* Markdown styling in the text itself: weight and colour only, never size, so the layers stay aligned */
+.editor-highlight .md-mark,
+.editor-highlight .md-list-mark,
+.editor-highlight .md-task-mark,
+.editor-highlight .md-hr {
+  color: var(--ink-faint);
+}
+
+.editor-highlight .md-list-mark,
+.editor-highlight .md-task-mark {
+  color: var(--accent);
+}
+
+.editor-highlight :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, .md-bold) {
+  font-weight: 700;
+}
+
+.editor-highlight .md-h1,
+.editor-highlight .md-h2 {
+  color: var(--ink);
+}
+
+.editor-highlight :is(.md-h3, .md-h4, .md-h5, .md-h6) {
+  color: var(--ink-soft);
+}
+
+.editor-highlight .md-italic {
+  font-style: italic;
+}
+
+.editor-highlight .md-strike {
+  text-decoration: line-through;
+  color: var(--ink-soft);
+}
+
+.editor-highlight .md-code {
+  background: var(--code-bg);
+  border-radius: 3px;
+}
+
+.editor-highlight .md-quote {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.editor-highlight .md-link-text {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.editor-highlight .md-link-url {
+  color: var(--ink-faint);
+}
+
+.editor-highlight .md-task-done {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+}
+
+/* Syntax highlight: one soft hue per part of speech */
+.editor-highlight .pos-noun {
+  color: var(--pos-noun);
+}
+
+.editor-highlight .pos-verb {
+  color: var(--pos-verb);
+}
+
+.editor-highlight .pos-adj {
+  color: var(--pos-adj);
+}
+
+.editor-highlight .pos-adv {
+  color: var(--pos-adv);
+}
+
+.editor-highlight .pos-conj {
+  color: var(--pos-conj);
+}
+
+/* Style check: three underline styles so they differ without relying on colour alone */
+.editor-highlight :is(.style-filler, .style-cliche, .style-redundancy) {
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+}
+
+.editor-highlight .style-filler {
+  text-decoration-style: dotted;
+  text-decoration-color: var(--style-filler);
+}
+
+.editor-highlight .style-cliche {
+  text-decoration-style: wavy;
+  text-decoration-color: var(--style-cliche);
+}
+
+.editor-highlight .style-redundancy {
+  text-decoration-style: dashed;
+  text-decoration-color: var(--style-redundancy);
+}
+
+/* Preview: rendered Markdown in the same typeface */
+.preview {
+  font-family: var(--font-writer);
+  font-size: var(--font-size);
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.preview > :first-child {
+  margin-top: 0;
+}
+
+.preview h1,
+.preview h2,
+.preview h3,
+.preview h4,
+.preview h5,
+.preview h6 {
+  margin: 1.6em 0 0.5em;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.preview h1 {
+  font-size: 1.9em;
+}
+
+.preview h2 {
+  font-size: 1.5em;
+}
+
+.preview h3 {
+  font-size: 1.22em;
+}
+
+.preview h4,
+.preview h5,
+.preview h6 {
+  font-size: 1em;
+  color: var(--ink-soft);
+}
+
+.preview p,
+.preview ul,
+.preview ol,
+.preview blockquote,
+.preview pre,
+.preview table {
+  margin: 0 0 1em;
+}
+
+.preview ul,
+.preview ol {
+  padding-left: 1.6em;
+}
+
+.preview ul {
+  list-style: disc;
+}
+
+.preview ol {
+  list-style: decimal;
+}
+
+.preview li.task {
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+.preview li.task input {
+  margin-right: 0.5em;
+  accent-color: var(--accent);
+}
+
+.preview li > :is(ul, ol) {
+  margin: 0.2em 0 0;
+}
+
+.preview blockquote {
+  padding-left: 1em;
+  border-left: 3px solid var(--rule);
+  color: var(--ink-soft);
+}
+
+.preview a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.preview code {
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background: var(--code-bg);
+  font-family: 'iA Writer Mono', ui-monospace, monospace;
+  font-size: 0.92em;
+}
+
+.preview pre {
+  padding: 0.9em 1.1em;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: var(--code-bg);
+}
+
+.preview pre code {
+  padding: 0;
+  background: none;
+}
+
+.preview hr {
+  margin: 2em 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.preview img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+.preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.preview th,
+.preview td {
+  padding: 0.4em 0.7em;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+}
+
+.preview th {
+  font-weight: 700;
+}
+
+.preview del {
+  color: var(--ink-soft);
+}
+
+/* Quattro's italic is narrower than its regular, so italics would drift out of line with the textarea: use colour instead */
+[data-typeface='quattro'] .editor-highlight :is(.md-italic, .md-quote) {
+  font-style: normal;
+}
+
+[data-typeface='quattro'] .editor-highlight .md-italic {
+  color: var(--ink-soft);
+}

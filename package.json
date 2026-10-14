@@ -1,0 +1,56 @@
+{
+  "name": "margin",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vite dev",
+    "generate-routes": "tsr generate",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --deny-warnings",
+    "knip": "knip",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm knip"
+  },
+  "dependencies": {
+    "@effect/atom-react": "4.0.2",
+    "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/react-router": "1.170.41",
+    "@tanstack/react-start": "1.168.60",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.4.0",
+    "effect": "4.0.2",
+    "lucide-react": "^0.577.0",
+    "radix-ui": "^1.7.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^4.1.18",
+    "tw-animate-css": "^1.3.6"
+  },
+  "devDependencies": {
+    "@oxlint/plugins": "1.87.0",
+    "@playwright/test": "1.64.0",
+    "@tanstack/router-cli": "^1.132.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "knip": "6.41.0",
+    "oxlint": "1.87.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.0",
+    "vitest": "5.0.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "lightningcss"
+    ]
+  }
+}

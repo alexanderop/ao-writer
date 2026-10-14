@@ -1,0 +1,16 @@
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+.env
+.nitro
+.tanstack
+.output
+.vinxi
+__unconfig*
+
+# test output
+test-results
+playwright-report
+blob-report
