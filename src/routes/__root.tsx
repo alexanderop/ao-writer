@@ -7,14 +7,14 @@ import appCss from '../styles.css?url'
 Runs before the first paint: puts the saved (or system) theme on <html> so a reload does not flash the wrong colours.
 It reads the same localStorage entry as the settings atom.
 */
-const THEME_SCRIPT = `try{var s=JSON.parse(localStorage.getItem('margin:settings')||'null');var d=s?s.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d)}catch(e){}`
+const THEME_SCRIPT = `try{var s=JSON.parse(localStorage.getItem('ao-writer:settings')||'null');var d=s?s.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d)}catch(e){}`
 
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'Margin' },
+      { title: 'AO Writer' },
       { name: 'description', content: 'A quiet Markdown writer for the browser.' },
     ],
     links: [

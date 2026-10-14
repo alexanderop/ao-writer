@@ -1,14 +1,14 @@
-# Margin
+# AO Writer
 
 A quiet Markdown writer for the browser. One centred column of text, the tools out of the way, and a few
 writing aids you switch on when you want them: focus mode, syntax highlight, style check and a live preview.
 Everything you write stays in your browser (OPFS, with an IndexedDB fallback). There is no server and no account.
 
-Margin is an **original, clean-room implementation** inspired by the feature set of iA Writer. It contains no
+AO Writer is an **original, clean-room implementation** inspired by the feature set of iA Writer. It contains no
 code, word lists, colours, CSS or icons from that app; the part-of-speech tagger, the style lists and the
 Markdown renderer are written from scratch for this repo. The feature list is in [`docs/SPEC.md`](docs/SPEC.md).
 
-![Margin in focus mode with the syntax highlight on](docs/screenshots/04-focus-sentence.png)
+![AO Writer in focus mode with the syntax highlight on](docs/screenshots/04-focus-sentence.png)
 
 More screenshots (dark and light, typewriter, split and full preview, library, options) are in
 [`docs/screenshots`](docs/screenshots).

@@ -1,10 +1,10 @@
 /** The title of the document a first-time visitor sees. */
-export const WELCOME_NAME = 'Welcome to Margin'
+export const WELCOME_NAME = 'Welcome to AO Writer'
 
 /** The seed document: it is also a tour, so every feature has something to act on. */
-export const WELCOME_TEXT = `# Welcome to Margin
+export const WELCOME_TEXT = `# Welcome to AO Writer
 
-Margin is a quiet place to write. Start typing anywhere on this page. The tools around the text fade away while you work, and they come back when you move the mouse.
+AO Writer is a quiet place to write. Start typing anywhere on this page. The tools around the text fade away while you work, and they come back when you move the mouse.
 
 ## Try the writing modes
 

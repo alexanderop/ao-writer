@@ -4,7 +4,7 @@ import * as Atom from 'effect/reactivity/Atom'
 import { defaultSettings, Settings } from './settings.ts'
 
 /** The key the page's inline script also reads, so the theme is right before React starts. */
-const SETTINGS_KEY = 'margin:settings'
+const SETTINGS_KEY = 'ao-writer:settings'
 
 /** Browser storage as a key-value store; the app route is client-only, so this only runs in the browser. */
 const storage = Atom.runtime(KeyValueStore.layerStorage(() => localStorage))

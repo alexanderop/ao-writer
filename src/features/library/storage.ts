@@ -22,7 +22,7 @@ function attempt<A>(run: () => Promise<A>): Effect.Effect<A, StorageError> {
 async function opfsFolder(): Promise<FileSystemDirectoryHandle> {
   const root = await navigator.storage.getDirectory()
 
-  return root.getDirectoryHandle('margin', { create: true })
+  return root.getDirectoryHandle('ao-writer', { create: true })
 }
 
 async function opfsWrite(folder: FileSystemDirectoryHandle, name: string, text: string): Promise<void> {
@@ -116,7 +116,7 @@ interface StoredDocument {
   readonly body: string
 }
 
-const DB_NAME = 'margin'
+const DB_NAME = 'ao-writer'
 
 const STORE = 'documents'
 
@@ -202,7 +202,7 @@ const memoryStore: Effect.Effect<DocumentStore> = Effect.sync(() => {
 })
 
 /** Reads and writes documents. The browser layer uses OPFS and falls back to IndexedDB. */
-export class DocumentStorage extends Context.Service<DocumentStorage, DocumentStore>()('margin/library/DocumentStorage') {
+export class DocumentStorage extends Context.Service<DocumentStorage, DocumentStore>()('ao-writer/library/DocumentStorage') {
   /** OPFS when it works, IndexedDB otherwise. */
   static readonly layerBrowser = Layer.effect(DocumentStorage, opfsStore.pipe(Effect.catch(() => indexedDbStore)))
 

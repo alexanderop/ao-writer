@@ -1,11 +1,11 @@
-# Margin: spec
+# AO Writer: spec
 
-Margin is a focused Markdown writer that runs in the browser. Its feature set
+AO Writer is a focused Markdown writer that runs in the browser. Its feature set
 follows iA Writer 8.0.9 (macOS). The behaviour list below comes from a static
 REA analysis of the shipped app bundle: the decoded `Menu.nib` and
 `EditorPreferences.nib` (Evidence `ev_4e3198febd8a32d4dac1927a1a07e0855d321d71b306640b86e212bba4489b5b`)
 and the linked frameworks. Nothing was decompiled. All code, word lists,
-styles and icons in Margin are original. The iA Writer fonts are open source
+styles and icons in AO Writer are original. The iA Writer fonts are open source
 (SIL OFL 1.1) and are taken from the official repo
 https://github.com/iaolo/iA-Fonts together with their license file.
 

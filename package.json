@@ -1,5 +1,5 @@
 {
-  "name": "margin",
+  "name": "ao-writer",
   "private": true,
   "type": "module",
   "imports": {

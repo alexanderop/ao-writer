@@ -163,7 +163,7 @@ for (const backend of ['OPFS', 'IndexedDB'] as const) {
     await expect(page.getByTestId('editor')).toHaveValue('A second document')
     await expect(page.getByTestId('document-name')).toHaveText('Notes')
 
-    await page.getByRole('button', { name: 'Welcome to Margin' }).click()
+    await page.getByRole('button', { name: 'Welcome to AO Writer' }).click()
     await expect(page.getByTestId('editor')).toHaveValue('Words that must outlive this page')
     await page.getByRole('button', { name: 'Notes' }).click()
     await expect(page.getByTestId('editor')).toHaveValue('A second document')
@@ -174,7 +174,7 @@ for (const backend of ['OPFS', 'IndexedDB'] as const) {
     await active.getByTestId('delete-document').click()
     await active.getByTestId('confirm-delete').click()
     await expect(page.getByRole('button', { name: 'Notes' })).toHaveCount(0)
-    await expect(page.getByTestId('document-name')).toHaveText('Welcome to Margin')
+    await expect(page.getByTestId('document-name')).toHaveText('Welcome to AO Writer')
   })
 }
 
