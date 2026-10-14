@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '#/shared/ui/popover'
 /** The Vim keys that work when Vim keybindings are on in the options. */
 const VIM_KEYS: readonly { readonly label: string; readonly keys: string }[] = [
   { label: 'Move', keys: 'h j k l' },
+  { label: 'Jump 10 rows down / up', keys: 'J K' },
   { label: 'Words', keys: 'w b e' },
   { label: 'Line start / first / end', keys: '0 ^ $' },
   { label: 'Top / bottom, line', keys: 'gg G' },

@@ -23,6 +23,14 @@ interface Operand {
 
 const times = (count: number): number => Math.max(1, count)
 
+/** `J` and `K` jump this many rows down and up; they act as `10j` and `10k`, so a count multiplies them. */
+const JUMP_ROWS = 10
+
+const JUMPS: ReadonlyMap<string, string> = new Map([
+  ['J', 'j'],
+  ['K', 'k'],
+])
+
 const stepping =
   (motion: motions.Motion): MotionSpec['target'] =>
   (text, pos, count) =>
@@ -39,6 +47,8 @@ const MOTIONS: ReadonlyMap<string, MotionSpec> = new Map([
   ['$', { kind: 'inclusive', target: stepping(motions.lineLast) }],
   ['j', { kind: 'linewise', target: stepping(motions.lineDown) }],
   ['k', { kind: 'linewise', target: stepping(motions.lineUp) }],
+  ['J', { kind: 'linewise', target: (text, pos, count) => motions.repeat(motions.lineDown, text, pos, times(count) * JUMP_ROWS) }],
+  ['K', { kind: 'linewise', target: (text, pos, count) => motions.repeat(motions.lineUp, text, pos, times(count) * JUMP_ROWS) }],
   ['G', { kind: 'linewise', target: (text, _pos, count) => motions.fileEnd(text, count) }],
   ['gg', { kind: 'linewise', target: (text, _pos, count) => motions.fileStart(text, count) }],
 ] satisfies [string, MotionSpec][])
@@ -260,6 +270,10 @@ function insertStart(text: string, pos: number): number {
 
 /** Where a row move or a motion key puts the cursor, or null when the key is not a motion. */
 function landing(state: VimState, key: string, text: string, pos: number, rows: RowMotion): { pos: number; goalX: number | null } | null {
+  const jump = JUMPS.get(key)
+
+  if (jump !== undefined) return landing({ ...state, count: times(totalCount(state)) * JUMP_ROWS, operatorCount: 0 }, jump, text, pos, rows)
+
   if ((key === 'j' || key === 'k') && state.mode === 'visual-line') {
     // the selection is made of lines, so the cursor moves by line, as `dj` does
     const column = state.goalX ?? pos - lineStart(text, pos)

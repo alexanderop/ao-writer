@@ -67,6 +67,7 @@ through the same path as typing, so the browser's own undo keeps working.
 | `h` `j` `k` `l`, arrows | Left, down, up, right. `j` and `k` move by wrapped row, like `gj` and `gk`, and keep their column across rows |
 | `w` `b` `e` | Word forward, word back, end of word (a run of punctuation is a word, and so is an empty line) |
 | `0` `^` `$` | Start of line, first non-blank, end of line |
+| `J` `K` | Jump 10 rows down or up (by wrapped row, like `10j` / `10k`; `2J` jumps 20, `dJ` deletes 11 lines). Replaces Vim's join-lines `J` and keyword-lookup `K` |
 | `gg` `G` | First and last line; with a count, that line (`3G`) |
 | `2w` `3l` `5j` | Counts work for motions, for operators (`2dd`, `d3w`) and for `p` |
 | `d` `c` `y` + motion | Delete, change (delete and insert), yank; `dd` `cc` `yy` act on lines, `dw` `cw` `d$` `dj` on a range |

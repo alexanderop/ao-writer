@@ -262,6 +262,43 @@ describe('j and k by visual row', () => {
   })
 })
 
+describe('J and K jump ten rows', () => {
+  const lines = Array.from({ length: 30 }, (_, index) => `line ${index}`)
+  const at = (line: number): string => lines.map((text, index) => (index === line ? `|${text}` : text)).join('\n')
+
+  it('J moves ten rows down and K ten rows up', () => {
+    expect(view(at(0), 'J')).toBe(at(10))
+    expect(view(at(25), 'K')).toBe(at(15))
+  })
+
+  it('stop at the first and the last row', () => {
+    expect(view(at(25), 'J')).toBe(at(29))
+    expect(view(at(4), 'K')).toBe(at(0))
+  })
+
+  it('multiply a count', () => {
+    expect(view(at(0), '2J')).toBe(at(20))
+  })
+
+  it('move by wrapped row', () => {
+    const session = new Session(`|${'a'.repeat(120)}`)
+
+    session.width = 10
+
+    expect(session.press('J').selection).toEqual({ start: 100, end: 100 })
+  })
+
+  it('extend a linewise selection by ten lines', () => {
+    const session = new Session(at(0)).press('VJ')
+
+    expect(session.selection).toEqual({ start: 0, end: lines.slice(0, 11).join('\n').length + 1 })
+  })
+
+  it('dJ deletes the current line and the ten below it', () => {
+    expect(view(at(0), 'dJ')).toBe(`|${lines.slice(11).join('\n')}`)
+  })
+})
+
 describe('d', () => {
   it('dw deletes to the next word', () => {
     expect(view('|one two three', 'dw')).toBe('|two three')
