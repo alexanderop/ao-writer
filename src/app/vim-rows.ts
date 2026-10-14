@@ -1,12 +1,12 @@
 import type { RowMotion } from '../core/vim/state.ts'
 
-interface TextSpan {
+export interface TextSpan {
   readonly node: Text
   readonly start: number
 }
 
 /** The highlight layer's text nodes with the text offset each one starts at. */
-function textSpans(root: HTMLElement): TextSpan[] {
+export function textSpans(root: HTMLElement): TextSpan[] {
   const spans: TextSpan[] = []
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
   let start = 0

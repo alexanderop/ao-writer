@@ -58,7 +58,7 @@ for themselves (Cmd+1..6 and Cmd+L in Chrome, for example), so headings, lists a
 ## Vim keybindings
 
 Optional and off by default. Switch them on under Options, Keys; the setting is saved with the others. The status
-bar then shows the mode (`NORMAL`, `INSERT` or `VISUAL`, plus any count or operator still waiting for its motion),
+bar then shows the mode (`NORMAL`, `INSERT`, `VISUAL` or `VISUAL LINE`, plus any count or operator still waiting for its motion),
 normal and visual mode draw a block cursor, and every new or switched document starts in normal mode. Edits go
 through the same path as typing, so the browser's own undo keeps working.
 
@@ -70,10 +70,13 @@ through the same path as typing, so the browser's own undo keeps working.
 | `gg` `G` | First and last line; with a count, that line (`3G`) |
 | `2w` `3l` `5j` | Counts work for motions, for operators (`2dd`, `d3w`) and for `p` |
 | `d` `c` `y` + motion | Delete, change (delete and insert), yank; `dd` `cc` `yy` act on lines, `dw` `cw` `d$` `dj` on a range |
-| `x` `D` `C` `s` `S` `Y` | `dl`, `d$`, `c$`, `cl`, `cc`, `yy` |
+| `x` `X` `D` `C` `s` `S` `Y` | `dl`, `dh`, `d$`, `c$`, `cl`, `cc`, `yy` |
 | `p` `P` | Paste after or before the cursor; a yanked line is pasted as a line |
 | `i` `a` `I` `A` `o` `O` | Insert before or after the cursor, at the first non-blank or the end of the line, on a new line below or above |
 | `v` | Visual mode (characters). Motions extend the selection; `d` `x` `c` `y` act on it; `o` swaps its ends; `v` or Esc leaves |
+| `V` | Linewise visual mode. The selection always covers whole lines and `j` `k` move by logical line; `d` `x` delete the lines, `y` yanks them (so `p` and `P` paste lines), `c` replaces them with an empty line; `o` swaps the ends, `V` or Esc leaves |
+| `v` in `V`, `V` in `v` | Switch between the two kinds of selection, keeping anchor and cursor |
+| `p` `P` in visual mode | Replace the selection with the register. `p` leaves the replaced text in the register, `P` keeps the register as it was (Vim 9) |
 | `u`, Ctrl+R | Undo, redo (the browser's history) |
 | Esc, Ctrl+[ | Back to normal mode |
 
@@ -81,7 +84,7 @@ Yanks are also written to the system clipboard when the browser allows it. In no
 types into the document, but Cmd/Ctrl chords (Bold, Preview, copy, paste) still work. Ctrl+R is redo in normal and
 visual mode and the preview shortcut in insert mode (on a Mac the preview stays on Cmd+R). With an operator, `j`
 and `k` act on whole logical lines, as in Vim. Not included: `.` repeat, text objects, `/` search, named registers,
-`:` commands, macros, linewise visual mode (`V`).
+`:` commands, macros, blockwise visual mode (`Ctrl+V`).
 
 Other behaviour: Enter continues lists, task lists and quotes (and leaves them on an empty item); typewriter
 mode keeps the caret line in the middle of the screen; the status bar counter cycles through words, characters,

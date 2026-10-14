@@ -6,6 +6,7 @@ import type { TextCounts } from '../core/text/counts.ts'
 import { shortcutLabel } from '../core/shortcuts.ts'
 import type { ActionId } from '../core/shortcuts.ts'
 import { countsAtom, selectionCountsAtom, vimAtom } from '../features/editor/atoms.ts'
+import { modeLabel } from '../core/vim/state.ts'
 import { saveStatusAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { nextCounter } from '../features/settings/settings.ts'
@@ -70,7 +71,7 @@ export function StatusBar({ isMac, run }: StatusBarProps) {
         </span>
         {settings.vim ? (
           <span className="font-bold tracking-wider text-ink-faint" data-testid="vim-mode" data-mode={vim.mode}>
-            {vim.mode.toUpperCase()}
+            {modeLabel(vim.mode)}
             {typedKeys === '' ? '' : ` ${typedKeys}`}
           </span>
         ) : null}

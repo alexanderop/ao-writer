@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import type { TextRange } from '../text/focus.ts'
-import { cursorOf, handleKey, visualRange } from './vim.ts'
-import { initialVimState, VimResult } from './state.ts'
-import type { RowMotion, VimKey, VimState } from './state.ts'
+import { cursorOf, handleKey, visualLineRange, visualRange } from './vim.ts'
+import { initialVimState, modeLabel, VimResult } from './state.ts'
+import type { Mode, RowMotion, VimKey, VimState } from './state.ts'
 
 /** Rows that wrap every `width` characters, each character one unit wide; enough to test row moves without a browser. */
 function wrappedRows(text: string, width: number): RowMotion {
@@ -120,7 +120,7 @@ class Session {
     return `${this.text.slice(0, cursor)}|${this.text.slice(cursor)}`
   }
 
-  get mode(): string {
+  get mode(): Mode {
     return this.state.mode
   }
 }
@@ -338,6 +338,19 @@ describe('d', () => {
     expect(view('ab|c', 'x')).toBe('a|b')
     expect(view('|abcd', '3x')).toBe('|d')
     expect(view('|abcd', '9x')).toBe('|')
+  })
+
+  it('X deletes the character before the cursor, with a count', () => {
+    expect(view('ab|c', 'X')).toBe('a|c')
+    expect(view('abc|d', '3X')).toBe('|d')
+    expect(view('abc|d', '9X')).toBe('|d')
+    expect(new Session('abc|d').press('Xp').text).toBe('abdc')
+  })
+
+  it('X at the start of a line does nothing and does not join lines', () => {
+    expect(view('|abc', 'X')).toBe('|abc')
+    expect(new Session('a\n|bc').press('X').text).toBe('a\nbc')
+    expect(new Session('a\n|\nb').press('X').text).toBe('a\n\nb')
   })
 
   it('x on an empty line does nothing', () => {
@@ -652,6 +665,296 @@ describe('visual mode', () => {
     expect(cursorOf(state, 'one two', { start: 4, end: 7 })).toBe(6)
     expect(cursorOf(state, 'one two', { start: 1, end: 5 })).toBe(1)
     expect(visualRange('one two', 4, 1)).toEqual({ start: 1, end: 5 })
+  })
+})
+
+describe('linewise visual mode', () => {
+  it('V selects the whole line, including its line break', () => {
+    const session = new Session('a\n|bc\nd').press('V')
+
+    expect(session.mode).toBe('visual-line')
+    expect(session.selection).toEqual({ start: 2, end: 5 })
+    expect(modeLabel(session.mode)).toBe('VISUAL LINE')
+  })
+
+  it('V on the last line has no line break to take', () => {
+    expect(new Session('a\n|bc').press('V').selection).toEqual({ start: 2, end: 4 })
+  })
+
+  it('V in an empty document selects nothing and still enters the mode', () => {
+    const session = new Session('|').press('V')
+
+    expect(session.mode).toBe('visual-line')
+    expect(session.selection).toEqual({ start: 0, end: 0 })
+  })
+
+  it('Escape and a second V leave with the cursor in its column', () => {
+    expect(new Session('a\nb|c\nd').press('V<Esc>').view).toBe('a\nb|c\nd')
+    expect(new Session('a\nb|c\nd').press('VV').view).toBe('a\nb|c\nd')
+    expect(new Session('a\nb|c\nd').press('VV').mode).toBe('normal')
+    expect(new Session('a\nb|c\nd').press('Vj<Esc>').view).toBe('a\nbc\n|d')
+  })
+
+  it('j and k extend the selection by lines', () => {
+    const down = new Session('a\n|bc\nd\ne').press('Vj')
+
+    expect(down.selection).toEqual({ start: 2, end: 7 })
+    expect(down.view).toBe('a\nbc\n|d\ne')
+    expect(new Session('a\nb\n|c').press('Vk').selection).toEqual({ start: 2, end: 5 })
+  })
+
+  it('j and k stop at the first and the last line', () => {
+    expect(new Session('a\n|bc\nd').press('Vjjj').selection).toEqual({ start: 2, end: 6 })
+    expect(new Session('a\n|bc\nd').press('Vkkk').selection).toEqual({ start: 0, end: 5 })
+  })
+
+  it('j and k move by logical line, not by wrapped row', () => {
+    const session = new Session('|aaaaaaaaaabbbbbbbbbb\nc')
+
+    session.width = 10
+    session.press('Vj')
+
+    expect(session.selection).toEqual({ start: 0, end: 22 })
+  })
+
+  it('take a count and keep the column across short lines', () => {
+    expect(new Session('|a\nb\nc\nd').press('V2j').selection).toEqual({ start: 0, end: 6 })
+    expect(new Session('ab|cd\n\nabcd').press('Vjj').view).toBe('abcd\n\nab|cd')
+  })
+
+  it('gg and G extend to the first and the last line', () => {
+    expect(new Session('a\n|b\nc').press('VG').selection).toEqual({ start: 2, end: 5 })
+    expect(new Session('a\n|b\nc').press('Vgg').selection).toEqual({ start: 0, end: 4 })
+    expect(new Session('a\nb\nc\n|d').press('V2G').selection).toEqual({ start: 2, end: 7 })
+  })
+
+  it('w b e h l 0 $ move the cursor and keep the selection on the line', () => {
+    const session = new Session('|one two\nx').press('Vw')
+
+    expect(session.selection).toEqual({ start: 0, end: 8 })
+    expect(session.view).toBe('one |two\nx')
+    expect(session.press('$').view).toBe('one tw|o\nx')
+    expect(session.press('b').view).toBe('one |two\nx')
+    expect(session.press('e').view).toBe('one tw|o\nx')
+    expect(session.press('0').view).toBe('|one two\nx')
+    expect(session.press('ll').view).toBe('on|e two\nx')
+    expect(session.press('h').view).toBe('o|ne two\nx')
+    expect(session.selection).toEqual({ start: 0, end: 8 })
+  })
+
+  it('swallows keys that would insert', () => {
+    const session = new Session('|abc').press('Vip')
+
+    expect(session.text).toBe('abc')
+    expect(session.mode).toBe('visual-line')
+  })
+
+  describe('d and x', () => {
+    it('delete the first line and land on the next', () => {
+      const session = new Session('|a\nb\nc').press('Vd')
+
+      expect(session.text).toBe('b\nc')
+      expect(session.view).toBe('|b\nc')
+      expect(session.mode).toBe('normal')
+      expect(new Session('|a\nb\nc').press('Vx').text).toBe('b\nc')
+    })
+
+    it('delete the lines the selection covers, in either direction', () => {
+      expect(new Session('|a\nb\nc').press('Vjd').text).toBe('c')
+      expect(new Session('a\nb\n|c\nd').press('Vkd').view).toBe('a\n|d')
+    })
+
+    it('delete the last line together with the line break before it', () => {
+      const session = new Session('a\n|b').press('Vd')
+
+      expect(session.text).toBe('a')
+      expect(session.view).toBe('|a')
+    })
+
+    it('empty a single-line document', () => {
+      expect(new Session('a|bc').press('Vd').text).toBe('')
+    })
+
+    it('take empty lines inside the selection', () => {
+      expect(new Session('a\n|\n\nb').press('Vjd').text).toBe('a\nb')
+      expect(new Session('a\n|\nb').press('Vd').text).toBe('a\nb')
+    })
+
+    it('fill the register with the lines, so p brings them back', () => {
+      expect(new Session('|a\nb\nc').press('Vjdp').text).toBe('c\na\nb')
+    })
+  })
+
+  describe('y', () => {
+    it('yanks the lines as a linewise register and returns to the top line', () => {
+      const session = new Session('a\nb\n|c').press('Vky')
+
+      expect(session.yanked).toEqual(['b\nc\n'])
+      expect(session.text).toBe('a\nb\nc')
+      expect(session.mode).toBe('normal')
+      expect(session.view).toBe('a\n|b\nc')
+    })
+
+    it('keeps the column of the top end', () => {
+      expect(new Session('a\nb|bb\ncc').press('Vjy').view).toBe('a\nb|bb\ncc')
+      expect(new Session('a\nbbb\nc|c').press('Vky').view).toBe('a\nb|bb\ncc')
+    })
+
+    it('then p pastes the lines below the current line and P above it', () => {
+      expect(new Session('a\nb\n|c').press('Vkyp').text).toBe('a\nb\nb\nc\nc')
+      expect(new Session('a\nb\n|c').press('VkyP').text).toBe('a\nb\nc\nb\nc')
+    })
+
+    it('takes the last line without a trailing line break', () => {
+      const session = new Session('a\n|c').press('Vyp')
+
+      expect(session.yanked).toEqual(['c\n'])
+      expect(session.text).toBe('a\nc\nc')
+    })
+
+    it('takes an empty line', () => {
+      const session = new Session('a\n|\nb').press('Vyp')
+
+      expect(session.yanked).toEqual(['\n'])
+      expect(session.text).toBe('a\n\n\nb')
+    })
+
+    it('on a single-line document pastes a copy below', () => {
+      expect(new Session('|abc').press('Vyp').text).toBe('abc\nabc')
+    })
+  })
+
+  describe('c', () => {
+    it('replaces the lines with one empty line and starts inserting', () => {
+      const session = new Session('a\n|b\nc\nd').press('VjcX')
+
+      expect(session.text).toBe('a\nX\nd')
+      expect(session.mode).toBe('insert')
+    })
+
+    it('works on the last line and on a single-line document', () => {
+      expect(new Session('a\n|b').press('VcX').text).toBe('a\nX')
+      expect(new Session('a|bc').press('VcX').text).toBe('X')
+      expect(new Session('a\n|\nb').press('VcX').text).toBe('a\nX\nb')
+    })
+
+    it('keeps the old lines in the register', () => {
+      expect(new Session('a\n|b\nc').press('Vc<Esc>p').text).toBe('a\n\nb\nc')
+    })
+  })
+
+  describe('o', () => {
+    it('swaps the ends: the cursor moves to the other line', () => {
+      const session = new Session('a\n|b\nc').press('Vjo')
+
+      expect(session.selection).toEqual({ start: 2, end: 5 })
+      expect(session.view).toBe('a\n|b\nc')
+      expect(session.press('k').selection).toEqual({ start: 0, end: 5 })
+    })
+  })
+
+  describe('switching with v', () => {
+    it('v turns the selection into a charwise one around the same anchor and cursor', () => {
+      const session = new Session('o|ne\ntwo').press('Vjv')
+
+      expect(session.mode).toBe('visual')
+      expect(session.selection).toEqual({ start: 1, end: 6 })
+      expect(session.view).toBe('one\nt|wo')
+    })
+
+    it('V turns a charwise selection into whole lines', () => {
+      const session = new Session('o|ne\ntwo').press('vjV')
+
+      expect(session.mode).toBe('visual-line')
+      expect(session.selection).toEqual({ start: 0, end: 7 })
+      expect(session.view).toBe('one\nt|wo')
+    })
+
+    it('the same key again exits', () => {
+      expect(new Session('o|ne').press('vV').mode).toBe('visual-line')
+      expect(new Session('o|ne').press('vVV').mode).toBe('normal')
+      expect(new Session('o|ne').press('Vv').mode).toBe('visual')
+      expect(new Session('o|ne').press('Vvv').mode).toBe('normal')
+    })
+
+    it('keeps a backwards selection backwards', () => {
+      const session = new Session('one\nt|wo').press('Vkv')
+
+      expect(session.selection).toEqual({ start: 1, end: 6 })
+      expect(session.view).toBe('o|ne\ntwo')
+    })
+  })
+
+  it('computes the cursor from the state, not from the selection', () => {
+    const state = { ...initialVimState, mode: 'visual-line' as const, visualAnchor: 0, visualCursor: 5 }
+
+    expect(cursorOf(state, 'one\ntwo', { start: 0, end: 7 })).toBe(5)
+    expect(visualLineRange('one\ntwo', 5, 1)).toEqual({ start: 0, end: 7 })
+  })
+})
+
+describe('p and P in visual mode', () => {
+  it('replace the selection with the register and put the replaced text in the register', () => {
+    const session = new Session('|ab cd').press('xwvep')
+
+    expect(session.text).toBe('b a')
+    expect(session.view).toBe('b |a')
+    expect(session.state.register).toEqual({ text: 'cd', linewise: false })
+    expect(session.press('P').text).toBe('b cda')
+  })
+
+  it('P replaces too but leaves the register alone', () => {
+    const session = new Session('|ab cd').press('xwveP')
+
+    expect(session.text).toBe('b a')
+    expect(session.state.register).toEqual({ text: 'a', linewise: false })
+    expect(session.press('P').text).toBe('b aa')
+  })
+
+  it('swap a deleted word with the selection', () => {
+    const session = new Session('|one two').press('dwvep')
+
+    expect(session.text).toBe('one ')
+    expect(session.state.register).toEqual({ text: 'two', linewise: false })
+  })
+
+  it('repeat the register with a count', () => {
+    expect(new Session('|ab cd').press('xwve3p').text).toBe('b aaa')
+  })
+
+  it('do nothing with an empty register, and stay in visual mode', () => {
+    const session = new Session('|abc').press('vp')
+
+    expect(session.text).toBe('abc')
+    expect(session.mode).toBe('visual')
+  })
+
+  it('replace lines with yanked lines', () => {
+    const session = new Session('a\nb\n|c').press('yyggVp')
+
+    expect(session.text).toBe('c\nb\nc')
+    expect(session.mode).toBe('normal')
+    expect(session.state.register).toEqual({ text: 'a\n', linewise: true })
+    expect(session.press('p').text).toBe('c\na\nb\nc')
+  })
+
+  it('replace lines with several yanked lines, the last line included', () => {
+    expect(new Session('|a\nb\nc').press('yjGVp').text).toBe('a\nb\na\nb')
+  })
+
+  it('turn a charwise register into a line when it replaces lines', () => {
+    const session = new Session('|ab\ncd').press('xjVp')
+
+    expect(session.text).toBe('b\na')
+    expect(session.state.register).toEqual({ text: 'cd\n', linewise: true })
+  })
+
+  it('split the line when lines replace a charwise selection', () => {
+    const session = new Session('L\n|one two three').press('ggyyjwvep')
+
+    expect(session.text).toBe('L\none \nL\n three')
+    expect(session.view).toBe('L\none \n|L\n three')
+    expect(session.state.register).toEqual({ text: 'two', linewise: false })
   })
 })
 

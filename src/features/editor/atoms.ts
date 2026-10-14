@@ -4,8 +4,9 @@ import { buildSegments } from '../../core/editor/annotate.ts'
 import { renderMarkdown } from '../../core/markdown/render.ts'
 import { countText } from '../../core/text/counts.ts'
 import { focusRange } from '../../core/text/focus.ts'
-import { initialVimState } from '../../core/vim/state.ts'
+import { initialVimState, isVisual } from '../../core/vim/state.ts'
 import type { VimState } from '../../core/vim/state.ts'
+import { cursorOf } from '../../core/vim/vim.ts'
 import { settingsAtom } from '../settings/atoms.ts'
 import { styleOptions, syntaxOptions } from '../settings/settings.ts'
 
@@ -21,6 +22,14 @@ export const typingAtom = Atom.make(false).pipe(Atom.keepAlive)
 /** The Vim layer's mode, pending keys and register; reset whenever Vim is switched or the document changes. */
 export const vimAtom = Atom.make<VimState>(initialVimState).pipe(Atom.keepAlive)
 
+/** Where the caret is: the end of the selection, except in Vim's visual modes, where it is the cursor end. */
+export const caretAtom = Atom.make((get) => {
+  const selection = get(selectionAtom)
+  const vim = get(vimAtom)
+
+  return isVisual(vim.mode) ? cursorOf(vim, get(textAtom), selection) : selection.end
+})
+
 /** The whole document's counts. */
 export const countsAtom = Atom.make((get) => countText(get(textAtom)))
 
@@ -35,7 +44,7 @@ export const selectionCountsAtom = Atom.make((get) => {
 export const segmentsAtom = Atom.make((get) => {
   const text = get(textAtom)
   const settings = get(settingsAtom)
-  const { end } = get(selectionAtom)
+  const end = get(caretAtom)
   const focus = settings.focus ? focusRange(text, end, settings.focusScope) : null
 
   return buildSegments(text, {

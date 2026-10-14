@@ -265,6 +265,71 @@ test('vim keys: normal mode edits without typing, insert mode types, Escape retu
   await expect(mode).toHaveText('NORMAL')
 })
 
+test('vim keys: V selects whole lines; d deletes them, u restores them, y and p paste a line below', async ({ page }) => {
+  await startWriting(page, 'one\n\nthree\nfour')
+  await enableVim(page)
+
+  const editor = page.getByTestId('editor')
+  const mode = page.getByTestId('vim-mode')
+  const selected = (): Promise<string> => editor.evaluate((element) => (element instanceof HTMLTextAreaElement ? element.value.slice(element.selectionStart, element.selectionEnd) : ''))
+
+  await page.keyboard.press('g')
+  await page.keyboard.press('g')
+  await page.keyboard.press('V')
+  await expect(mode).toHaveText('VISUAL LINE')
+  await expect.poll(selected).toBe('one\n')
+  await expect(page.getByTestId('vim-band')).toHaveCount(1)
+
+  // j moves by logical line, and the empty line is part of the selection and the band
+  await page.keyboard.press('j')
+  await expect.poll(selected).toBe('one\n\n')
+  await expect(page.getByTestId('vim-band')).toHaveCount(2)
+
+  await page.keyboard.press('d')
+  await expect(editor).toHaveValue('three\nfour')
+  await expect(mode).toHaveText('NORMAL')
+  await expect(page.getByTestId('vim-band')).toHaveCount(0)
+
+  await page.keyboard.press('u')
+  await expect(editor).toHaveValue('one\n\nthree\nfour')
+
+  // yank the first line and paste it below the cursor line
+  await page.keyboard.press('g')
+  await page.keyboard.press('g')
+  await page.keyboard.press('V')
+  await page.keyboard.press('y')
+  await expect(mode).toHaveText('NORMAL')
+  await expect(editor).toHaveValue('one\n\nthree\nfour')
+  await page.keyboard.press('G')
+  await page.keyboard.press('p')
+  await expect(editor).toHaveValue('one\n\nthree\nfour\none')
+
+  // v and V switch the kind of selection, and the same key leaves
+  await page.keyboard.press('g')
+  await page.keyboard.press('g')
+  await page.keyboard.press('V')
+  await page.keyboard.press('v')
+  await expect(mode).toHaveText('VISUAL')
+  await page.keyboard.press('V')
+  await expect(mode).toHaveText('VISUAL LINE')
+  await page.keyboard.press('V')
+  await expect(mode).toHaveText('NORMAL')
+
+  // p over a selection swaps in the register; X deletes the character before the cursor
+  await page.keyboard.press('g')
+  await page.keyboard.press('g')
+  await page.keyboard.press('x')
+  await expect(editor).toHaveValue('ne\n\nthree\nfour\none')
+  await page.keyboard.press('v')
+  await page.keyboard.press('e')
+  await page.keyboard.press('p')
+  await expect(editor).toHaveValue('o\n\nthree\nfour\none')
+  await page.keyboard.press('G')
+  await page.keyboard.press('$')
+  await page.keyboard.press('X')
+  await expect(editor).toHaveValue('o\n\nthree\nfour\noe')
+})
+
 test('vim keys: j and k move by wrapped row, not by paragraph', async ({ page }) => {
   await startWriting(page, 'lorem ipsum dolor sit amet '.repeat(10).trim())
   await enableVim(page)

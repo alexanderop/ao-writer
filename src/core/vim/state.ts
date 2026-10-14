@@ -3,7 +3,17 @@ import { Data } from 'effect'
 import type { TextEdit } from '../markdown/format.ts'
 import type { TextRange } from '../text/focus.ts'
 
-export type Mode = 'normal' | 'insert' | 'visual'
+export type Mode = 'normal' | 'insert' | 'visual' | 'visual-line'
+
+/** True for both kinds of visual mode: the textarea holds a selection the keys act on. */
+export function isVisual(mode: Mode): boolean {
+  return mode === 'visual' || mode === 'visual-line'
+}
+
+/** The mode as the status bar names it. */
+export function modeLabel(mode: Mode): string {
+  return mode === 'visual-line' ? 'VISUAL LINE' : mode.toUpperCase()
+}
 
 /** What `d`, `c` and `y` last took; linewise text ends with its line break. */
 interface Register {
@@ -23,7 +33,9 @@ export interface VimState {
   readonly register: Register
   /** Where the visual selection started. */
   readonly visualAnchor: number
-  /** The x position `j` and `k` keep across rows, or null when the last command was not a row move. */
+  /** The cursor in linewise visual mode, whose selection covers whole lines and so cannot tell where the cursor is; charwise visual mode reads it from the selection. */
+  readonly visualCursor: number
+  /** The x position `j` and `k` keep across rows (the column, in linewise visual mode), or null when the last command was not a row move. */
   readonly goalX: number | null
 }
 
@@ -34,6 +46,7 @@ export const initialVimState: VimState = {
   operatorCount: 0,
   register: { text: '', linewise: false },
   visualAnchor: 0,
+  visualCursor: 0,
   goalX: null,
 }
 

@@ -1,7 +1,7 @@
 import type { TextRange } from '../text/focus.ts'
 import { charLength, clampNormal, firstNonBlank, lineEnd, lineNumber, lineStart, lineStartOf, previousChar } from './lines.ts'
 import * as motions from './motions.ts'
-import { VimResult } from './state.ts'
+import { isVisual, VimResult } from './state.ts'
 import type { Mode, RowMotion, VimKey, VimState } from './state.ts'
 
 type Operator = 'd' | 'c' | 'y'
@@ -81,6 +81,7 @@ const SHORTCUT_OPERATORS: ReadonlyMap<string, readonly [Operator, string]> = new
   ['D', ['d', '$']],
   ['C', ['c', '$']],
   ['s', ['c', 'l']],
+  ['X', ['d', 'h']],
 ])
 
 function isOperator(key: string): key is Operator {
@@ -112,11 +113,26 @@ export function visualRange(text: string, anchor: number, cursor: number): TextR
   return { start: low, end: high + (text[high] === '\n' ? 1 : charLength(text, high)) }
 }
 
+/** The whole lines from the anchor's to the cursor's, without the line break that ends the last one. */
+function lineSpan(text: string, anchor: number, cursor: number): TextRange {
+  return { start: lineStart(text, Math.min(anchor, cursor)), end: lineEnd(text, Math.max(anchor, cursor)) }
+}
+
+/** The text linewise visual mode selects: whole lines and the line break behind them, when there is one. */
+export function visualLineRange(text: string, anchor: number, cursor: number): TextRange {
+  const { start, end } = lineSpan(text, anchor, cursor)
+
+  return { start, end: end < text.length ? end + 1 : end }
+}
+
 /**
 The cursor's position for a state and the textarea's selection.
-In visual mode the cursor is the end of the selection that is not the anchor.
+In charwise visual mode the cursor is the end of the selection that is not the anchor;
+a linewise selection says nothing about columns, so the state keeps the cursor.
 */
 export function cursorOf(state: VimState, text: string, selection: TextRange): number {
+  if (state.mode === 'visual-line') return clampNormal(text, state.visualCursor)
+
   if (state.mode !== 'visual') return clampNormal(text, selection.start)
 
   if (selection.start === state.visualAnchor) return selection.end > selection.start ? previousChar(text, selection.end) : selection.start
@@ -244,6 +260,14 @@ function insertStart(text: string, pos: number): number {
 
 /** Where a row move or a motion key puts the cursor, or null when the key is not a motion. */
 function landing(state: VimState, key: string, text: string, pos: number, rows: RowMotion): { pos: number; goalX: number | null } | null {
+  if ((key === 'j' || key === 'k') && state.mode === 'visual-line') {
+    // the selection is made of lines, so the cursor moves by line, as `dj` does
+    const column = state.goalX ?? pos - lineStart(text, pos)
+    const delta = times(totalCount(state)) * (key === 'j' ? 1 : -1)
+
+    return { pos: motions.lineBy(text, pos, delta, column), goalX: column }
+  }
+
   if (key === 'j' || key === 'k') {
     let current = pos
     let goalX = state.goalX
@@ -268,9 +292,14 @@ function landing(state: VimState, key: string, text: string, pos: number, rows: 
 function moveTo(state: VimState, text: string, target: { pos: number; goalX: number | null }): VimResult {
   const next = { ...settled(state), goalX: target.goalX }
 
-  if (state.mode === 'visual') return VimResult.Move({ state: next, selection: visualRange(text, state.visualAnchor, target.pos), yank: null })
-
-  return VimResult.Move({ state: next, selection: collapsed(target.pos), yank: null })
+  switch (state.mode) {
+    case 'visual':
+      return VimResult.Move({ state: next, selection: visualRange(text, state.visualAnchor, target.pos), yank: null })
+    case 'visual-line':
+      return VimResult.Move({ state: { ...next, visualCursor: target.pos }, selection: visualLineRange(text, state.visualAnchor, target.pos), yank: null })
+    default:
+      return VimResult.Move({ state: next, selection: collapsed(target.pos), yank: null })
+  }
 }
 
 /** A pending operator meets its motion, or its own key for whole lines (`dd`). */
@@ -322,7 +351,9 @@ function normalKey(state: VimState, key: string, text: string, pos: number, rows
     case 'O':
       return openLine(state, text, pos, false)
     case 'v':
-      return VimResult.Move({ state: { ...next, mode: 'visual', visualAnchor: pos }, selection: visualRange(text, pos, pos), yank: null })
+      return enterVisual(state, text, 'visual', pos, pos)
+    case 'V':
+      return enterVisual(state, text, 'visual-line', pos, pos)
     case 'u':
       return VimResult.Undo({ state: next })
     case 'C-r':
@@ -332,38 +363,96 @@ function normalKey(state: VimState, key: string, text: string, pos: number, rows
   }
 }
 
-function visualKey(state: VimState, key: string, text: string, cursor: number, rows: RowMotion): VimResult {
+/** Starts visual mode of one kind, or turns the other kind into it, around the same anchor and cursor. */
+function enterVisual(state: VimState, text: string, mode: 'visual' | 'visual-line', anchor: number, cursor: number): VimResult {
+  const selection = mode === 'visual' ? visualRange(text, anchor, cursor) : visualLineRange(text, anchor, cursor)
+
+  return VimResult.Move({ state: { ...settled(state, mode), visualAnchor: anchor, visualCursor: cursor }, selection, yank: null })
+}
+
+function leaveVisual(state: VimState, cursor: number): VimResult {
+  return VimResult.Move({ state: settled(state, 'normal'), selection: collapsed(cursor), yank: null })
+}
+
+/** `d`, `x`, `y` and `c` on a charwise selection. */
+function charOperator(state: VimState, key: string, text: string, cursor: number): VimResult {
   const selection = visualRange(text, state.visualAnchor, cursor)
-  const next = settled(state)
-
-  const target = landing(state, key, text, cursor, rows)
-
-  if (target !== null) return moveTo(state, text, target)
-
   const taken = text.slice(selection.start, selection.end)
   const register = { text: taken, linewise: false }
   const rest = text.slice(0, selection.start) + text.slice(selection.end)
 
   switch (key) {
-    case 'g':
-      return VimResult.Stay({ state: { ...state, pending: 'g' } })
-    case 'o':
-      return VimResult.Move({ state: { ...next, visualAnchor: cursor }, selection, yank: null })
-    case 'v':
-      return VimResult.Move({ state: settled(state, 'normal'), selection: collapsed(cursor), yank: null })
     case 'y':
       return VimResult.Move({ state: { ...settled(state, 'normal'), register }, selection: collapsed(clampNormal(text, selection.start)), yank: taken })
-    case 'd':
-    case 'x':
-      return selection.start === selection.end
-        ? VimResult.Move({ state: settled(state, 'normal'), selection: collapsed(cursor), yank: null })
-        : deleteEdit({ ...settled(state, 'normal'), register }, selection, clampNormal(rest, selection.start))
     case 'c':
       return selection.start === selection.end
         ? VimResult.Move({ state: { ...settled(state, 'insert'), register }, selection: collapsed(cursor), yank: null })
         : deleteEdit({ ...settled(state, 'insert'), register }, selection, selection.start)
     default:
-      return VimResult.Stay({ state: next })
+      return selection.start === selection.end
+        ? leaveVisual(state, cursor)
+        : deleteEdit({ ...settled(state, 'normal'), register }, selection, clampNormal(rest, selection.start))
+  }
+}
+
+/** `d`, `x`, `y` and `c` on whole lines: the same as `dd`, `yy` and `cc` over the selected lines. */
+function lineOperator(state: VimState, key: string, text: string, cursor: number): VimResult {
+  const operator = key === 'y' || key === 'c' ? key : 'd'
+  const range = lineSpan(text, state.visualAnchor, cursor)
+
+  // the end that sits higher in the text decides the column `y` returns to
+  return operate(settled(state, 'normal'), operator, text, Math.min(state.visualAnchor, cursor), { range, linewise: true })
+}
+
+/**
+`p` and `P` over the selection: the register's text takes its place, and `p` leaves the replaced text in the register.
+Lines put over a charwise selection split its line; a charwise text put over lines becomes a line.
+*/
+function visualPut(state: VimState, key: string, text: string, cursor: number): VimResult {
+  const { register } = state
+
+  if (register.text === '') return VimResult.Stay({ state: settled(state) })
+
+  const lines = state.mode === 'visual-line'
+  const range = lines ? lineSpan(text, state.visualAnchor, cursor) : visualRange(text, state.visualAnchor, cursor)
+  const taken = text.slice(range.start, range.end)
+  const replaced = { text: lines ? `${taken}\n` : taken, linewise: lines }
+  const body = register.text.repeat(times(state.count))
+  const split = register.linewise && !lines
+  const insert = split ? `\n${body.slice(0, -1)}\n` : register.linewise ? body.slice(0, -1) : body
+  const rest = text.slice(0, range.start) + insert + text.slice(range.end)
+  const caret = register.linewise ? firstNonBlank(rest, range.start + (split ? 1 : 0)) : clampNormal(rest, previousChar(rest, range.start + insert.length))
+  const next = { ...settled(state, 'normal'), register: key === 'p' ? replaced : register }
+
+  return VimResult.Edit({ state: next, edit: { from: range.start, to: range.end, insert, selectionStart: caret, selectionEnd: caret }, yank: null })
+}
+
+function visualKey(state: VimState, key: string, text: string, cursor: number, rows: RowMotion): VimResult {
+  const target = landing(state, key, text, cursor, rows)
+
+  if (target !== null) return moveTo(state, text, target)
+
+  const lines = state.mode === 'visual-line'
+
+  switch (key) {
+    case 'g':
+      return VimResult.Stay({ state: { ...state, pending: 'g' } })
+    case 'o':
+      return enterVisual(state, text, lines ? 'visual-line' : 'visual', cursor, state.visualAnchor)
+    case 'v':
+      return lines ? enterVisual(state, text, 'visual', state.visualAnchor, cursor) : leaveVisual(state, cursor)
+    case 'V':
+      return lines ? leaveVisual(state, cursor) : enterVisual(state, text, 'visual-line', state.visualAnchor, cursor)
+    case 'p':
+    case 'P':
+      return visualPut(state, key, text, cursor)
+    case 'y':
+    case 'd':
+    case 'x':
+    case 'c':
+      return lines ? lineOperator(state, key, text, cursor) : charOperator(state, key, text, cursor)
+    default:
+      return VimResult.Stay({ state: settled(state) })
   }
 }
 
@@ -421,8 +510,8 @@ export function handleKey(state: VimState, input: VimKey, text: string, selectio
   const cursor = cursorOf(state, text, selection)
 
   if (key === 'Escape') {
-    return state.mode === 'visual'
-      ? VimResult.Move({ state: settled(state, 'normal'), selection: collapsed(cursor), yank: null })
+    return isVisual(state.mode)
+      ? leaveVisual(state, cursor)
       : VimResult.Stay({ state: settled(state) })
   }
 
@@ -434,5 +523,5 @@ export function handleKey(state: VimState, input: VimKey, text: string, selectio
 
   if (isOperator(state.pending)) return operatorKey(state, state.pending, key, text, cursor)
 
-  return state.mode === 'visual' ? visualKey(state, key, text, cursor, rows) : normalKey(state, key, text, cursor, rows)
+  return isVisual(state.mode) ? visualKey(state, key, text, cursor, rows) : normalKey(state, key, text, cursor, rows)
 }

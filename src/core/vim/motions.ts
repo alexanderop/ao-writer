@@ -164,6 +164,14 @@ export const lineUp: Motion = (text, pos) => {
   return columnOn(text, lineStart(text, start - 1), pos - start)
 }
 
+/** `j` and `k` in linewise visual mode: `delta` logical lines away, at `column` or the last character of a shorter line. */
+export function lineBy(text: string, pos: number, delta: number, column: number): number {
+  const last = lineNumber(text, text.length)
+  const target = Math.min(Math.max(lineNumber(text, pos) + delta, 0), last)
+
+  return columnOn(text, lineStartOf(text, target), column)
+}
+
 function columnOn(text: string, start: number, column: number): number {
   const end = lineEnd(text, start)
 

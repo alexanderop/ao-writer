@@ -216,6 +216,7 @@ body {
 .editor-stack {
   position: relative;
   display: grid;
+  isolation: isolate;
 }
 
 .editor-highlight,
@@ -274,6 +275,23 @@ body {
 /* Vim's block cursor: the character under it inverted, or one empty cell at a line end; the real caret hides */
 .editor-input[data-vim='block'] {
   caret-color: transparent;
+}
+
+/* Linewise visual mode: the band replaces the textarea's own selection, which paints a line break as a sliver and an empty line as nothing */
+.editor-input[data-vim='line'] {
+  caret-color: transparent;
+}
+
+.editor-input[data-vim='line']::selection {
+  background: transparent;
+}
+
+.vim-band {
+  position: absolute;
+  inset-inline: 0;
+  z-index: -1;
+  background: var(--selection);
+  pointer-events: none;
 }
 
 /* Markdown styling in the text itself: weight and colour only, never size, so the layers stay aligned */

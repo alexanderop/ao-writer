@@ -1,19 +1,21 @@
 import { useAtomSet, useAtomValue } from '@effect/atom-react'
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 
 import { continueList } from '../core/markdown/format.ts'
 import type { Segment } from '../core/editor/annotate.ts'
 import { charLength, clampNormal } from '../core/vim/lines.ts'
-import { initialVimState } from '../core/vim/state.ts'
+import { initialVimState, isVisual } from '../core/vim/state.ts'
 import type { VimState } from '../core/vim/state.ts'
 import { cursorOf } from '../core/vim/vim.ts'
-import { segmentsAtom, selectionAtom, textAtom, typingAtom, vimAtom } from '../features/editor/atoms.ts'
+import { caretAtom, segmentsAtom, selectionAtom, textAtom, typingAtom, vimAtom } from '../features/editor/atoms.ts'
 import { activeIdAtom, autosaveAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { applyEdit, editorInputAtom } from './editor-input.ts'
 import { runVimKey } from './vim-input.ts'
 import { visualRows } from './vim-rows.ts'
+import { selectionRows } from './vim-selection.ts'
+import type { BandRow } from './vim-selection.ts'
 
 /** The space the caret keeps from the top and bottom edge while it scrolls into view. */
 const CARET_MARGIN = 96
@@ -91,6 +93,7 @@ export function Editor() {
   const settings = useAtomValue(settingsAtom)
   const activeId = useAtomValue(activeIdAtom)
   const selection = useAtomValue(selectionAtom)
+  const caret = useAtomValue(caretAtom)
   const vim = useAtomValue(vimAtom)
   const setText = useAtomSet(textAtom)
   const setSelectionAtom = useAtomSet(selectionAtom)
@@ -104,6 +107,7 @@ export function Editor() {
   const highlightRef = useRef<HTMLDivElement | null>(null)
   const vimRef = useRef<VimState>(initialVimState)
   const lastSelection = useRef({ start: 0, end: 0 })
+  const [band, setBand] = useState<readonly BandRow[]>([])
 
   // publish the selection only when it changed, so a caret that did not move does not repaint the layer
   const setSelection = useCallback(
@@ -202,6 +206,30 @@ export function Editor() {
     }
   }, [segments, settings.typewriter])
 
+  // linewise visual mode paints its own band of full-width rows behind the text; it follows the layer's wrapping
+  const measureBand = useCallback((): void => {
+    const layer = highlightRef.current
+    const input = inputRef.current
+    const next = layer && input && vimRef.current.mode === 'visual-line' ? selectionRows(layer, { start: input.selectionStart, end: input.selectionEnd }) : []
+
+    setBand((current) => (current.length === 0 && next.length === 0 ? current : next))
+  }, [])
+
+  // after the commit, so the layer holds the text and the cursor the selection is measured against
+  useLayoutEffect(measureBand, [measureBand, text, selection, vim, segments])
+
+  useEffect(() => {
+    const layer = highlightRef.current
+
+    if (!layer) return
+
+    const observer = new ResizeObserver(measureBand)
+
+    observer.observe(layer)
+
+    return () => observer.disconnect()
+  }, [measureBand])
+
   const onChange = (event: ChangeEvent<HTMLTextAreaElement>): void => {
     const { value, selectionStart, selectionEnd } = event.target
 
@@ -248,7 +276,7 @@ export function Editor() {
     const scroller = event.currentTarget
 
     // a click moves the caret on its own, which ends a visual selection
-    if (vimRef.current.mode === 'visual') commitVim({ ...initialVimState, register: vimRef.current.register })
+    if (isVisual(vimRef.current.mode)) commitVim({ ...initialVimState, register: vimRef.current.register })
 
     if (!input || event.target === input) return
 
@@ -272,15 +300,18 @@ export function Editor() {
     <div ref={scrollRef} className="editor-scroll h-full overflow-y-auto" data-testid="editor-scroll" onMouseDown={onPageMouseDown}>
       <div className="editor-column" data-typewriter={settings.typewriter} data-testid="editor-column">
         <div className="editor-stack">
+          {band.map((row) => (
+            <div key={row.center} className="vim-band" style={{ top: row.center - row.height / 2, height: row.height }} aria-hidden data-testid="vim-band" />
+          ))}
           <div ref={highlightRef} className="editor-highlight" aria-hidden data-testid="highlight">
-            {renderSegments(text, segments, selection.end, vimCursor, markerRef)}
+            {renderSegments(text, segments, caret, vimCursor, markerRef)}
             {'​'}
           </div>
           <textarea
             ref={inputRef}
             className="editor-input"
             data-editor-input
-            data-vim={vimCursor === null ? undefined : 'block'}
+            data-vim={vimCursor === null ? undefined : vim.mode === 'visual-line' ? 'line' : 'block'}
             data-testid="editor"
             aria-label="Document text"
             value={text}
