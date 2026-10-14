@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import type { CSSProperties } from 'react'
 
 import { typingAtom, vimAtom } from '../features/editor/atoms.ts'
+import { highlightAtom } from '../features/highlight/atoms.ts'
 import { bootAtom, flushAtom, loadedAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { Editor } from './Editor.tsx'
@@ -74,6 +75,7 @@ export function App() {
   const run = useActions()
 
   useAtomMount(bootAtom)
+  useAtomMount(highlightAtom)
   useShortcuts(isMac, run, settings.vim && vim.mode !== 'insert')
   useChromeReturn()
   useFlushOnLeave()

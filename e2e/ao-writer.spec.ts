@@ -106,6 +106,48 @@ test('syntax highlight colours the parts of speech and each can be switched off'
   await expect(highlight.locator('.pos-noun').first()).toBeVisible()
 })
 
+test('fenced code gets Shiki colours in the editor and the preview, in light and dark', async ({ page }) => {
+  await startWriting(page, 'Some prose first.\n\n```ts\nconst answer: number = 42\n```')
+  await page.keyboard.press('ControlOrMeta+R')
+
+  const keyword = (scope: 'highlight' | 'preview') =>
+    page
+      .getByTestId(scope)
+      .locator(scope === 'highlight' ? '.code-tok' : 'pre code span')
+      .filter({ hasText: /^const$/ })
+
+  const colors = async () => ({
+    editor: await keyword('highlight').evaluate((element) => getComputedStyle(element).color),
+    preview: await keyword('preview').evaluate((element) => getComputedStyle(element).color),
+    ink: await page.getByTestId('highlight').evaluate((element) => getComputedStyle(element).color),
+  })
+
+  await expect(keyword('highlight')).toHaveCount(1)
+  await expect(keyword('preview')).toHaveCount(1)
+
+  const dark = process.platform === 'darwin' ? 'Meta+Control+N' : 'Control+Alt+N'
+
+  await expect(page.locator('html')).not.toHaveClass(/dark/)
+
+  const light = await colors()
+
+  expect(light.editor).toBe(light.preview)
+  expect(light.editor).not.toBe(light.ink)
+
+  // switching the theme only swaps which CSS variable the same spans use
+  await page.keyboard.press(dark)
+  await expect(page.locator('html')).toHaveClass(/dark/)
+
+  const night = await colors()
+
+  expect(night.editor).toBe(night.preview)
+  expect(night.editor).not.toBe(night.ink)
+  expect(night.editor).not.toBe(light.editor)
+
+  // prose is never coloured as code
+  await expect(page.getByTestId('highlight').locator('.code-tok').filter({ hasText: 'prose' })).toHaveCount(0)
+})
+
 test('preview renders Markdown and escapes HTML', async ({ page }) => {
   await startWriting(page, '# Hello preview\n\nSome *emphasis* here.\n\n<script>window.pwned = 1</script>')
 

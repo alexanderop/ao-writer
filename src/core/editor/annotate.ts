@@ -1,4 +1,7 @@
-import { markdownRanges } from '../markdown/highlight.ts'
+import { codeBlockKey } from '../markdown/code.ts'
+import type { CodeTokenMap, CodeTone } from '../markdown/code.ts'
+import { markdownLayout } from '../markdown/highlight.ts'
+import type { FencedBlock } from '../markdown/highlight.ts'
 import { tagText } from '../pos/tagger.ts'
 import type { PosTag, TaggedToken } from '../pos/tagger.ts'
 import { checkStyle } from '../style/check.ts'
@@ -29,6 +32,8 @@ export interface AnnotateOptions {
   readonly focus: TextRange | null
   /** The caret, so the overlay can place its measuring marker; it only forces a segment boundary. */
   readonly caret: number | null
+  /** Finished syntax colours of the fenced code blocks; a block without an entry keeps the plain code styling. */
+  readonly code: CodeTokenMap
 }
 
 /** A run of text with one set of classes. Segments are contiguous and cover the whole text. */
@@ -36,12 +41,27 @@ export interface Segment {
   readonly start: number
   readonly end: number
   readonly className: string
+  /** The syntax colour of a token in a code block; only colour, so the layer keeps the textarea's metrics. */
+  readonly tone?: CodeTone
 }
 
 interface Mark {
   readonly pos: number
   readonly delta: 1 | -1
   readonly className: string
+  readonly tone?: CodeTone
+}
+
+/** Marks the class of code tokens; their colour travels in the segment's tone. */
+const CODE_TOKEN_CLASS = 'code-tok'
+
+/** Marks a block that has syntax colours, so its background can run unbroken across the tokens. */
+const COLOURED_BLOCK_CLASS = 'code-coloured'
+
+interface Active {
+  count: number
+  readonly className: string
+  readonly tone: CodeTone | undefined
 }
 
 const POS_CLASS: ReadonlyMap<PosTag, { readonly className: string; readonly option: keyof SyntaxOptions }> = new Map([
@@ -97,6 +117,30 @@ function addRange(marks: Mark[], start: number, end: number, className: string):
   marks.push({ pos: start, delta: 1, className }, { pos: end, delta: -1, className })
 }
 
+function addTone(marks: Mark[], start: number, end: number, tone: CodeTone): void {
+  if (end <= start) return
+
+  marks.push({ pos: start, delta: 1, className: CODE_TOKEN_CLASS, tone }, { pos: end, delta: -1, className: CODE_TOKEN_CLASS, tone })
+}
+
+function addCode(marks: Mark[], blocks: readonly FencedBlock[], code: CodeTokenMap): void {
+  for (const block of blocks) {
+    const tokens = code.get(codeBlockKey(block))
+
+    if (tokens === undefined) continue
+
+    addRange(marks, block.start, block.end, COLOURED_BLOCK_CLASS)
+
+    for (const token of tokens) {
+      if (token.light !== null || token.dark !== null) addTone(marks, block.start + token.start, block.start + token.end, { light: token.light, dark: token.dark })
+    }
+  }
+}
+
+function markKey(mark: Mark): string {
+  return mark.tone === undefined ? mark.className : `${mark.className}\u0000${mark.tone.light}\u0000${mark.tone.dark}`
+}
+
 function addPartsOfSpeech(marks: Mark[], plain: string, options: SyntaxOptions): void {
   let offset = 0
 
@@ -125,20 +169,31 @@ function addStyle(marks: Mark[], text: string, options: StyleOptions): void {
   for (const match of checkStyle(text, kinds)) addRange(marks, match.start, match.end, `style-${match.kind}`)
 }
 
+function sameTone(a: CodeTone | undefined, b: CodeTone | undefined): boolean {
+  return a === b || (a !== undefined && b !== undefined && a.light === b.light && a.dark === b.dark)
+}
+
+function segment(start: number, end: number, className: string, tone: CodeTone | undefined): Segment {
+  return tone === undefined ? { start, end, className } : { start, end, className, tone }
+}
+
 function sweep(length: number, marks: Mark[], caret: number | null): readonly Segment[] {
   marks.sort((a, b) => a.pos - b.pos)
 
-  const active = new Map<string, number>()
+  const active = new Map<string, Active>()
   const segments: Segment[] = []
   let cursor = 0
   let index = 0
 
   while (cursor < length) {
     for (let mark = marks[index]; mark !== undefined && mark.pos <= cursor; mark = marks[index]) {
-      const count = (active.get(mark.className) ?? 0) + mark.delta
+      const key = markKey(mark)
+      const entry = active.get(key) ?? { count: 0, className: mark.className, tone: mark.tone }
 
-      if (count <= 0) active.delete(mark.className)
-      else active.set(mark.className, count)
+      entry.count += mark.delta
+
+      if (entry.count <= 0) active.delete(key)
+      else active.set(key, entry)
 
       index += 1
     }
@@ -147,13 +202,15 @@ function sweep(length: number, marks: Mark[], caret: number | null): readonly Se
 
     if (caret !== null && caret > cursor && caret < next) next = caret
 
-    const className = [...active.keys()].sort().join(' ')
+    const entries = [...active.values()]
+    const className = [...new Set(entries.map((entry) => entry.className))].sort().join(' ')
+    const tone = entries.find((entry) => entry.tone !== undefined)?.tone
     const last = segments.at(-1)
 
-    if (last && last.className === className && cursor !== caret) {
-      segments[segments.length - 1] = { start: last.start, end: next, className }
+    if (last && last.className === className && sameTone(last.tone, tone) && cursor !== caret) {
+      segments[segments.length - 1] = segment(last.start, next, className, tone)
     } else {
-      segments.push({ start: cursor, end: next, className })
+      segments.push(segment(cursor, next, className, tone))
     }
 
     cursor = next
@@ -169,11 +226,15 @@ export function buildSegments(text: string, options: AnnotateOptions): readonly 
   const marks: Mark[] = []
   const masks: TextRange[] = []
 
-  for (const range of markdownRanges(text)) {
+  const layout = markdownLayout(text)
+
+  for (const range of layout.ranges) {
     addRange(marks, range.start, range.end, range.className)
 
     if (range.mask) masks.push(range)
   }
+
+  addCode(marks, layout.blocks, options.code)
 
   if (options.syntax) addPartsOfSpeech(marks, prose(text, masks), options.syntax)
 

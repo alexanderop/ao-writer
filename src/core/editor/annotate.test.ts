@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
+import { codeBlockKey } from '../markdown/code.ts'
 import { buildSegments } from './annotate.ts'
 import type { AnnotateOptions, Segment } from './annotate.ts'
 
-const OFF: AnnotateOptions = { syntax: null, style: null, focus: null, caret: null }
+const OFF: AnnotateOptions = { syntax: null, style: null, focus: null, caret: null, code: new Map() }
 
 const ALL_SYNTAX = { nouns: true, verbs: true, adjectives: true, adverbs: true, conjunctions: true }
 
@@ -35,7 +36,7 @@ describe('buildSegments', () => {
 
   it('covers the whole text without gaps, whatever layers are on', () => {
     const text = '# Title\n\nSome **bold** words, really very quickly.\n\n- item one\n'
-    const options = { syntax: ALL_SYNTAX, style: ALL_STYLE, focus: { start: 9, end: 20 }, caret: 15 }
+    const options = { syntax: ALL_SYNTAX, style: ALL_STYLE, focus: { start: 9, end: 20 }, caret: 15, code: new Map() }
 
     assertCovers(text, buildSegments(text, options))
     assertCovers(text, buildSegments(text, OFF))
@@ -120,5 +121,48 @@ describe('buildSegments', () => {
 
   it('merges neighbours with the same classes when there is no caret split', () => {
     expect(buildSegments('plain text', OFF)).toEqual([{ start: 0, end: 10, className: '' }])
+  })
+
+  describe('given syntax colours for a fenced block', () => {
+    const text = 'Some quick prose.\n\n```ts\nconst a = 1\n```\n'
+
+    const tokens = [
+      { start: 0, end: 5, light: '#ab5959', dark: '#f47067' },
+      { start: 5, end: 6, light: null, dark: null },
+      { start: 6, end: 7, light: '#b07d48', dark: '#6cb6ff' },
+    ]
+
+    const code = new Map([[codeBlockKey({ lang: 'ts', code: 'const a = 1' }), tokens]])
+
+    it('colours the tokens inside the fence and leaves the rest alone', () => {
+      const segments = buildSegments(text, { ...OFF, code })
+      const keyword = segments.find((segment) => text.slice(segment.start, segment.end) === 'const')
+      const prose = segments.find((segment) => segment.start === 0)
+
+      expect(keyword?.className).toBe('code-coloured code-tok md-code')
+      expect(keyword?.tone).toEqual({ light: '#ab5959', dark: '#f47067' })
+      expect(prose?.tone).toBeUndefined()
+      assertCovers(text, segments)
+    })
+
+    it('keeps the plain code styling while the block has no tokens', () => {
+      const segments = buildSegments(text, OFF)
+
+      expect(segments.some((segment) => segment.tone !== undefined)).toBe(false)
+      expect(classesAt(text, segments, 'const')).toEqual(['md-code'])
+    })
+
+    it('does not tag parts of speech inside code, even with the syntax highlight on', () => {
+      const segments = buildSegments(text, { ...OFF, syntax: ALL_SYNTAX, code })
+
+      expect(classesAt(text, segments, 'const')).toEqual(['code-coloured', 'code-tok', 'md-code'])
+      expect(classesAt(text, segments, 'prose')).toEqual(['pos-noun'])
+    })
+
+    it('does not colour a block whose code changed', () => {
+      const segments = buildSegments(text.replace('const a = 1', 'const a = 2'), { ...OFF, code })
+
+      expect(segments.some((segment) => segment.tone !== undefined)).toBe(false)
+    })
   })
 })

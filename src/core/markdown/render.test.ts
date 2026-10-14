@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { renderMarkdown } from "./render.ts";
+import { codeBlockKey } from "./code.ts";
+import type { CodeToken } from "./code.ts";
+import { codeBlocks, renderMarkdown } from "./render.ts";
 
 const EXTERNAL = 'rel="noopener noreferrer" target="_blank"';
 
@@ -33,6 +35,7 @@ const ALLOWED_TAGS = new Set([
   "th",
   "td",
   "input",
+  "span",
 ]);
 
 /** Assert that the html only contains whitelisted tags and no event-handler attributes. */
@@ -824,5 +827,67 @@ describe("given generated stress documents", () => {
     for (let seed = 1000; seed < 1020; seed++) {
       expectSafe(renderMarkdown(generate(seed, 3000)));
     }
+  });
+});
+
+describe("given highlighted code", () => {
+  const code = "let a = <b>";
+
+  const tokens: readonly CodeToken[] = [
+    { start: 0, end: 3, light: "#ab5959", dark: "#f47067" },
+    { start: 3, end: 4, light: null, dark: null },
+    { start: 4, end: 5, light: "#b07d48", dark: null },
+    { start: 8, end: 11, light: "#2e8f82", dark: "#f69d50" },
+  ];
+
+  const colors = new Map([[codeBlockKey({ lang: "ts", code }), tokens]]);
+
+  it("should wrap coloured tokens in spans with both theme colours", () => {
+    const html = renderMarkdown(`\`\`\`ts\n${code}\n\`\`\``, colors);
+
+    expect(html).toContain('<span style="--shiki-light:#ab5959;--shiki-dark:#f47067">let</span>');
+    expect(html).toContain('<span style="--shiki-light:#b07d48;--shiki-dark:var(--ink)">a</span>');
+    expectSafe(html);
+  });
+
+  it("should escape the code between and inside tokens", () => {
+    const html = renderMarkdown(`\`\`\`ts\n${code}\n\`\`\``, colors);
+
+    expect(html).toContain("</span> = <span");
+    expect(html).toContain("&lt;b&gt;</span>");
+    expect(html).not.toContain("<b>");
+  });
+
+  it("should keep the text of the code unchanged", () => {
+    const html = renderMarkdown(`\`\`\`ts\n${code}\n\`\`\``, colors);
+
+    expect(html.replace(/<[^>]+>/g, "")).toBe("let a = &lt;b&gt;\n");
+  });
+
+  it("should render plain code when the block has no tokens yet", () => {
+    expect(renderMarkdown("```ts\nlet a\n```", colors)).toBe('<pre><code class="language-ts">let a\n</code></pre>');
+    expect(renderMarkdown("```ts\nlet a\n```")).toBe('<pre><code class="language-ts">let a\n</code></pre>');
+  });
+
+  it("should not apply tokens of a block with another language or code", () => {
+    expect(renderMarkdown(`\`\`\`js\n${code}\n\`\`\``, colors)).not.toContain("<span");
+    expect(renderMarkdown("```ts\nlet a = <c>\n```", colors)).not.toContain("<span");
+  });
+
+  it("should not let a hostile colour leave its attribute", () => {
+    const hostile = new Map([[codeBlockKey({ lang: "ts", code: "x" }), [{ start: 0, end: 1, light: '"><script>alert(1)</script>', dark: null }]]]);
+    const html = renderMarkdown("```ts\nx\n```", hostile);
+
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&quot;&gt;&lt;script&gt;");
+  });
+
+  it("should list the highlightable blocks, nested ones too, each once", () => {
+    const source = "```ts\na\n```\n\n```\nplain\n```\n\n> ```py\n> b\n> ```\n\n- item\n\n  ```ts\n  a\n  ```\n\n```ts\na\n```";
+
+    expect(codeBlocks(source)).toEqual([
+      { lang: "ts", code: "a" },
+      { lang: "py", code: "b" },
+    ]);
   });
 });

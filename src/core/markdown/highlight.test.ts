@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { markdownRanges } from "./highlight.ts";
+import { markdownLayout, markdownRanges } from "./highlight.ts";
 import type { MdRange } from "./highlight.ts";
 
 /** Describe each range as `class:text` for compact assertions. */
@@ -482,5 +482,43 @@ describe("given stress input", () => {
     markdownRanges(text);
 
     expect(performance.now() - started).toBeLessThan(3000);
+  });
+});
+
+describe("given fenced code blocks with a language", () => {
+  it("should report the code of each block with its offsets", () => {
+    const text = "intro\n\n```ts\nlet a = 1;\n\nlet b;\n```\nafter\n\n~~~python title=x\nprint(1)\n~~~";
+    const blocks = markdownLayout(text).blocks;
+
+    expect(blocks.map((block) => [block.lang, block.code])).toEqual([
+      ["ts", "let a = 1;\n\nlet b;"],
+      ["python", "print(1)"],
+    ]);
+
+    for (const block of blocks) {
+      expect(text.slice(block.start, block.end)).toBe(block.code);
+    }
+  });
+
+  it("should skip fences without a language", () => {
+    expect(markdownLayout("```\nplain\n```").blocks).toEqual([]);
+  });
+
+  it("should end an unterminated fence at the end of the text", () => {
+    const text = "```ts\nlet a\nlet b";
+    const blocks = markdownLayout(text).blocks;
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.code).toBe("let a\nlet b");
+    expect(blocks[0]?.end).toBe(text.length);
+  });
+
+  it("should report an empty block for an empty fence", () => {
+    expect(markdownLayout("```ts\n```").blocks.map((block) => block.code)).toEqual([""]);
+    expect(markdownLayout("```ts").blocks.map((block) => block.code)).toEqual([""]);
+  });
+
+  it("should not read a longer inner fence as the end of the block", () => {
+    expect(markdownLayout("````ts\na\n```\nb\n````").blocks.map((block) => block.code)).toEqual(["a\n```\nb"]);
   });
 });

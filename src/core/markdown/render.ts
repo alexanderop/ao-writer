@@ -1,3 +1,5 @@
+import { codeBlockKey, sanitizeLanguage } from "./code.ts";
+import type { CodeBlock, CodeToken, CodeTokenMap } from "./code.ts";
 import { parseInline } from "./inline.ts";
 import type { DelimRun, EmphasisMatch, InlineNode } from "./inline.ts";
 
@@ -66,6 +68,7 @@ interface FenceOpen {
 
 interface RenderContext {
   readonly slugs: Map<string, number>;
+  readonly code: CodeTokenMap;
 }
 
 interface Safe {
@@ -841,7 +844,7 @@ function parseFencedCode(lines: readonly string[], start: number, fence: FenceOp
   }
 
   const word = fence.info.split(" ")[0] ?? "";
-  const lang = decodeEntities(word).replace(/[^A-Za-z0-9_+#.-]/g, "");
+  const lang = sanitizeLanguage(decodeEntities(word));
 
   return { block: { kind: "code", lang, code: body.join("\n") }, next: Math.min(at + 1, lines.length) };
 }
@@ -1057,6 +1060,41 @@ function renderItem(item: ListItem, tight: boolean, ctx: RenderContext): string 
   return `<li${cls}>${firstInline ? "" : "\n"}${body}${lastInline ? "" : "\n"}</li>`;
 }
 
+/** The colour of a token as a CSS value: the colour from the theme, or the page's text colour. */
+function toneValue(color: string | null): string {
+  return color === null ? "var(--ink)" : color;
+}
+
+/**
+ * Code with one span per coloured token. The text is escaped here, token by token; the colours
+ * only ever reach a style attribute through escapeHtml, so neither can inject markup.
+ */
+function coloredCode(code: string, tokens: readonly CodeToken[]): string {
+  let out = "";
+  let at = 0;
+
+  for (const token of tokens) {
+    const start = Math.max(token.start, at);
+    const end = Math.min(token.end, code.length);
+
+    if (end <= start) {
+      continue;
+    }
+
+    out += escapeHtml(code.slice(at, start));
+
+    const text = escapeHtml(code.slice(start, end));
+
+    out +=
+      token.light === null && token.dark === null
+        ? text
+        : `<span style="--shiki-light:${escapeHtml(toneValue(token.light))};--shiki-dark:${escapeHtml(toneValue(token.dark))}">${text}</span>`;
+    at = end;
+  }
+
+  return out + escapeHtml(code.slice(at));
+}
+
 function renderBlock(block: Block, ctx: RenderContext): string {
   switch (block.kind) {
     case "paragraph":
@@ -1065,7 +1103,8 @@ function renderBlock(block: Block, ctx: RenderContext): string {
       return renderHeading(block.level, block.text, ctx);
     case "code": {
       const cls = block.lang === "" ? "" : ` class="language-${escapeHtml(block.lang)}"`;
-      const body = block.code === "" ? "" : `${escapeHtml(block.code)}\n`;
+      const tokens = block.lang === "" ? undefined : ctx.code.get(codeBlockKey(block));
+      const body = block.code === "" ? "" : `${tokens === undefined ? escapeHtml(block.code) : coloredCode(block.code, tokens)}\n`;
 
       return `<pre><code${cls}>${body}</code></pre>`;
     }
@@ -1094,8 +1133,31 @@ function renderBlocks(parsed: readonly Parsed[], ctx: RenderContext): string {
  * Render Markdown to safe HTML. Raw HTML in the source is escaped, and only http, https,
  * mailto, tel and relative urls are kept.
  */
-export function renderMarkdown(source: string): string {
-  const ctx: RenderContext = { slugs: new Map<string, number>() };
+export function renderMarkdown(source: string, code: CodeTokenMap = new Map()): string {
+  const ctx: RenderContext = { slugs: new Map<string, number>(), code };
 
   return renderBlocks(parseBlocks(splitLines(source), 0), ctx);
+}
+
+function collectCode(parsed: readonly Parsed[], out: Map<string, CodeBlock>): void {
+  for (const { block } of parsed) {
+    if (block.kind === "code" && block.lang !== "") {
+      out.set(codeBlockKey(block), { lang: block.lang, code: block.code });
+    } else if (block.kind === "quote") {
+      collectCode(block.children, out);
+    } else if (block.kind === "list") {
+      for (const item of block.items) {
+        collectCode(item.blocks, out);
+      }
+    }
+  }
+}
+
+/** The fenced code blocks with a language that {@link renderMarkdown} would colour, each once. */
+export function codeBlocks(source: string): readonly CodeBlock[] {
+  const found = new Map<string, CodeBlock>();
+
+  collectCode(parseBlocks(splitLines(source), 0), found);
+
+  return [...found.values()];
 }

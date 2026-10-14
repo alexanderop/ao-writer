@@ -1,6 +1,6 @@
 import { useAtomSet, useAtomValue } from '@effect/atom-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import type { ChangeEvent, CSSProperties, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 
 import { continueList } from '../core/markdown/format.ts'
 import type { Segment } from '../core/editor/annotate.ts'
@@ -20,24 +20,36 @@ import type { BandRow } from './vim-selection.ts'
 /** The space the caret keeps from the top and bottom edge while it scrolls into view. */
 const CARET_MARGIN = 96
 
+type ToneStyle = CSSProperties & { '--tok-light': string; '--tok-dark': string }
+
+/** The syntax colours of a code token as the two CSS variables the stylesheet picks from by theme. */
+function toneStyle(segment: Segment): ToneStyle | undefined {
+  const tone = segment.tone
+
+  if (tone === undefined) return undefined
+
+  return { '--tok-light': tone.light ?? 'var(--ink)', '--tok-dark': tone.dark ?? 'var(--ink)' }
+}
+
 /** A segment's text with the block cursor cut out of it: the character under the cursor, or a one-cell block at a line end. */
 function cursorNodes(text: string, segment: Segment, index: number, cursor: number): ReactNode[] {
   const className = segment.className === '' ? undefined : segment.className
+  const style = toneStyle(segment)
   const char = text.slice(cursor, cursor + charLength(text, cursor))
   const after = text.slice(cursor + char.length, segment.end)
 
   return [
-    <span key={`${index}-before`} className={className}>
+    <span key={`${index}-before`} className={className} style={style}>
       {text.slice(segment.start, cursor)}
     </span>,
     char === '' ? (
       <span key={`${index}-cursor`} className="vim-cursor vim-cursor-eol" data-testid="vim-cursor" />
     ) : (
-      <span key={`${index}-cursor`} className={className === undefined ? 'vim-cursor' : `${className} vim-cursor`} data-testid="vim-cursor">
+      <span key={`${index}-cursor`} className={className === undefined ? 'vim-cursor' : `${className} vim-cursor`} style={style} data-testid="vim-cursor">
         {char}
       </span>
     ),
-    <span key={`${index}-after`} className={className}>
+    <span key={`${index}-after`} className={className} style={style}>
       {after}
     </span>,
   ]
@@ -69,7 +81,7 @@ function renderSegments(text: string, segments: readonly Segment[], caret: numbe
     }
 
     nodes.push(
-      <span key={index} className={segment.className === '' ? undefined : segment.className}>
+      <span key={index} className={segment.className === '' ? undefined : segment.className} style={toneStyle(segment)}>
         {text.slice(segment.start, segment.end)}
       </span>,
     )

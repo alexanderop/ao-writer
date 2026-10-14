@@ -398,6 +398,20 @@ body {
   text-decoration-color: var(--style-redundancy);
 }
 
+/* A coloured block is cut into many spans: square them off so the background runs unbroken */
+.editor-highlight .md-code.code-coloured {
+  border-radius: 0;
+}
+
+/* Syntax colours of fenced code (Shiki): colour only, so the layer stays aligned. Both themes are on the span; the dark class picks */
+.editor-highlight .code-tok {
+  color: var(--tok-light);
+}
+
+:where(.dark) .editor-highlight .code-tok {
+  color: var(--tok-dark);
+}
+
 /* After the styling rules above, so the block wins over a part-of-speech colour */
 .editor-highlight .vim-cursor {
   background: var(--accent);
@@ -523,6 +537,15 @@ body {
 .preview pre code {
   padding: 0;
   background: none;
+}
+
+/* Highlighted code (Shiki): each token carries its light and dark colour; the dark class picks */
+.preview pre code span {
+  color: var(--shiki-light);
+}
+
+.dark .preview pre code span {
+  color: var(--shiki-dark);
 }
 
 .preview hr {

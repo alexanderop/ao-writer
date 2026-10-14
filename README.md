@@ -55,6 +55,29 @@ for themselves (Cmd+1..6 and Cmd+L in Chrome, for example), so headings, lists a
 | Link | Cmd+K | Ctrl+K |
 | Mark task completed | Cmd+Alt+X | Ctrl+Alt+X |
 
+## Code highlighting
+
+Fenced code blocks with a language are coloured with [Shiki](https://shiki.style), in the editor and in the
+preview, in both themes (`vitesse-light` and `github-dark-dimmed`). Switching the theme only swaps a CSS
+variable, so nothing is re-tokenised.
+
+````md
+```ts
+const answer: number = 42
+```
+````
+
+Supported languages (and their aliases): `ts` (`typescript`), `tsx`, `js` (`javascript`), `jsx`, `json`, `html`,
+`css`, `vue`, `bash` (`sh`, `shell`, `zsh`), `python` (`py`), `rust` (`rs`), `go`, `sql`, `yaml` (`yml`),
+`markdown` (`md`) and `diff`. Any other language, and fences without one, stay plain code.
+
+Shiki is loaded lazily: it uses the fine-grained `shiki/core` build with the JavaScript regex engine (no
+WebAssembly), and each grammar is its own chunk that is fetched the first time a fence uses it. A document
+without a supported fence never loads any of it. In the editor only the colour changes (never weight, style
+or size), so the overlay stays aligned with the textarea; tokens arrive about 120 ms after you stop typing,
+are cached per block (language and code), and a block that is still waiting keeps the plain code styling.
+Parts-of-speech and style-check colouring skip code, as before.
+
 ## Vim keybindings
 
 Optional and off by default. Switch them on under Options, Keys; the setting is saved with the others. The status
@@ -104,11 +127,12 @@ the last keystroke (and when the tab hides).
   applies it; wrapped-row moves are measured on the highlight layer in `app/vim-rows.ts`.
 - **`src/core`**: framework-free TypeScript with unit tests: `pos/` (lexicon + suffix rules + context rules
   tagger), `style/` (word lists and a phrase matcher), `markdown/` (live-styling ranges, safe HTML renderer,
-  format edits), `text/` (counts, sentence and paragraph detection), `vim/` (key → result: motions,
+  format edits, the colour-token types of fenced code), `text/` (counts, sentence and paragraph detection), `vim/` (key → result: motions,
   operators, registers; no DOM), `shortcuts.ts`.
 - **`src/features`**: Effect 4 services and atoms. `library/storage.ts` is the `DocumentStorage` service (OPFS
   layer with an IndexedDB fallback and an in-memory layer for tests), `library/atoms.ts` holds the documents,
-  the debounced autosave and the library actions, `settings/` is the persisted settings atom.
+  the debounced autosave and the library actions, `settings/` is the persisted settings atom, `highlight/` is the
+  `CodeHighlighter` service (lazy Shiki, per-block cache) and the atom that keeps the code tokens of the editor and the preview up to date.
 - **`src/app`**: React 19 components on TanStack Start (SPA mode) and Tailwind 4.
 
 ## Fonts

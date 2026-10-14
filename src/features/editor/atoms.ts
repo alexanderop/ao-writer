@@ -1,6 +1,7 @@
 import * as Atom from 'effect/reactivity/Atom'
 
 import { buildSegments } from '../../core/editor/annotate.ts'
+import type { CodeTokenMap } from '../../core/markdown/code.ts'
 import { renderMarkdown } from '../../core/markdown/render.ts'
 import { countText } from '../../core/text/counts.ts'
 import { focusRange } from '../../core/text/focus.ts'
@@ -18,6 +19,9 @@ export const selectionAtom = Atom.make({ start: 0, end: 0 }).pipe(Atom.keepAlive
 
 /** True while the writer is typing, so the chrome can fade away. */
 export const typingAtom = Atom.make(false).pipe(Atom.keepAlive)
+
+/** The syntax colours of the document's fenced code blocks, by block. The highlight driver fills it in; both the overlay and the preview read it. */
+export const codeTokensAtom = Atom.make<CodeTokenMap>(new Map()).pipe(Atom.keepAlive)
 
 /** The Vim layer's mode, pending keys and register; reset whenever Vim is switched or the document changes. */
 export const vimAtom = Atom.make<VimState>(initialVimState).pipe(Atom.keepAlive)
@@ -52,8 +56,9 @@ export const segmentsAtom = Atom.make((get) => {
     style: styleOptions(settings),
     focus,
     caret: end,
+    code: get(codeTokensAtom),
   })
 })
 
 /** The preview pane's HTML; empty while the preview is closed. */
-export const previewHtmlAtom = Atom.make((get) => (get(settingsAtom).preview ? renderMarkdown(get(textAtom)) : ''))
+export const previewHtmlAtom = Atom.make((get) => (get(settingsAtom).preview ? renderMarkdown(get(textAtom), get(codeTokensAtom)) : ''))

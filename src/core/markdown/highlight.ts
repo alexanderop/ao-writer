@@ -1,3 +1,5 @@
+import { sanitizeLanguage } from "./code.ts";
+import type { CodeBlock } from "./code.ts";
 import { parseInline } from "./inline.ts";
 import type { EmphasisMatch, InlineNode } from "./inline.ts";
 
@@ -8,6 +10,18 @@ export interface MdRange {
   readonly className: string;
   /** True when the span is not prose (syntax, code, urls) so the part-of-speech tagger must skip it. */
   readonly mask: boolean;
+}
+
+/** A fenced code block that names a language; `start` and `end` bound its code in the source (the fence lines are outside). */
+export interface FencedBlock extends CodeBlock {
+  readonly start: number;
+  readonly end: number;
+}
+
+/** Everything one pass over the source finds: the styling ranges and the fenced code blocks. */
+export interface MarkdownLayout {
+  readonly ranges: readonly MdRange[];
+  readonly blocks: readonly FencedBlock[];
 }
 
 interface Segment {
@@ -25,11 +39,15 @@ interface Pending {
 interface Fence {
   readonly char: string;
   readonly length: number;
+  readonly lang: string;
+  /** Offset of the first line after the opening fence. */
+  readonly bodyStart: number;
 }
 
 interface State {
   readonly text: string;
   readonly out: MdRange[];
+  readonly blocks: FencedBlock[];
   fence: Fence | null;
   pending: Pending | null;
 }
@@ -110,7 +128,9 @@ function openFence(text: string, from: number, end: number): { fence: Fence } | 
     return null;
   }
 
-  return { fence: { char, length: j - from } };
+  const lang = sanitizeLanguage(text.slice(j, end).trim().split(/\s/)[0] ?? "");
+
+  return { fence: { char, length: j - from, lang, bodyStart: end + 1 } };
 }
 
 function closesFence(text: string, from: number, end: number, fence: Fence): boolean {
@@ -261,6 +281,18 @@ function listLine(state: State, from: number, end: number): boolean {
   return true;
 }
 
+/** Records the code of a closed (or unterminated) fence; blocks without a language are not worth colouring. */
+function closeBlock(state: State, fence: Fence, codeEnd: number): void {
+  if (fence.lang === "") {
+    return;
+  }
+
+  const start = Math.min(fence.bodyStart, state.text.length);
+  const end = Math.max(start, Math.min(codeEnd, state.text.length));
+
+  state.blocks.push({ lang: fence.lang, code: state.text.slice(start, end), start, end });
+}
+
 function processLine(state: State, from: number, end: number): void {
   const { text } = state;
   const fence = state.fence;
@@ -268,6 +300,7 @@ function processLine(state: State, from: number, end: number): void {
   if (fence !== null) {
     if (closesFence(text, from, end, fence)) {
       add(state, from, end, "md-mark", true);
+      closeBlock(state, fence, from - 1);
       state.fence = null;
     } else {
       add(state, from, end, "md-code", true);
@@ -427,12 +460,27 @@ function applyInline(state: State, segments: readonly Segment[]): void {
   }
 }
 
+/** The layout of the text scanned last: the overlay and the code highlighter ask about the same text in one go. */
+let last: { readonly text: string; readonly layout: MarkdownLayout } | null = null;
+
 /**
- * Compute the styling ranges for Markdown source text. Ranges may overlap or nest; sorted by
+ * Compute the styling ranges and the fenced code blocks for Markdown source text. Ranges may overlap or nest; sorted by
  * start, then longest first. Linear in the length of the text.
  */
-export function markdownRanges(text: string): readonly MdRange[] {
-  const state: State = { text, out: [], fence: null, pending: null };
+export function markdownLayout(text: string): MarkdownLayout {
+  if (last !== null && last.text === text) {
+    return last.layout;
+  }
+
+  const layout = scanLayout(text);
+
+  last = { text, layout };
+
+  return layout;
+}
+
+function scanLayout(text: string): MarkdownLayout {
+  const state: State = { text, out: [], blocks: [], fence: null, pending: null };
   let from = 0;
 
   while (from <= text.length) {
@@ -443,8 +491,17 @@ export function markdownRanges(text: string): readonly MdRange[] {
     from = end + 1;
   }
 
+  if (state.fence !== null) {
+    closeBlock(state, state.fence, text.length);
+  }
+
   flushPending(state);
   state.out.sort((a, b) => a.start - b.start || b.end - a.end);
 
-  return state.out;
+  return { ranges: state.out, blocks: state.blocks };
+}
+
+/** Just the styling ranges of {@link markdownLayout}. */
+export function markdownRanges(text: string): readonly MdRange[] {
+  return markdownLayout(text).ranges;
 }
