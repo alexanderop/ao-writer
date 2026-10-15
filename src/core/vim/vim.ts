@@ -1,10 +1,15 @@
+import type { TextEdit } from '../markdown/format.ts'
 import type { TextRange } from '../text/focus.ts'
 import { charLength, clampNormal, firstNonBlank, lineEnd, lineNumber, lineStart, lineStartOf, previousChar } from './lines.ts'
 import * as motions from './motions.ts'
+import { isObjectKey, isStretching, textObject } from './objects.ts'
 import { isVisual, VimResult } from './state.ts'
-import type { Find, FindKind, Mode, RowMotion, VimKey, VimState } from './state.ts'
+import type { Change, Find, FindKind, Mode, RowMotion, VimKey, VimState } from './state.ts'
 
-type Operator = 'd' | 'c' | 'y'
+type Operator = 'd' | 'c' | 'y' | '>' | '<'
+
+/** `>` adds this much indent to a line and `<` takes up to this much (or one tab) away; four spaces nest any Markdown list. */
+const SHIFT = '    '
 
 /** How far an operator reaches: up to the target, through it, or over whole lines. */
 type MotionKind = 'exclusive' | 'inclusive' | 'linewise'
@@ -49,6 +54,12 @@ const MOTIONS: ReadonlyMap<string, MotionSpec> = new Map([
   ['w', { kind: 'exclusive', target: stepping(motions.wordForward) }],
   ['b', { kind: 'exclusive', target: stepping(motions.wordBack) }],
   ['e', { kind: 'inclusive', target: stepping(motions.wordEnd) }],
+  ['W', { kind: 'exclusive', target: stepping(motions.bigWordForward) }],
+  ['B', { kind: 'exclusive', target: stepping(motions.bigWordBack) }],
+  ['E', { kind: 'inclusive', target: stepping(motions.bigWordEnd) }],
+  ['ge', { kind: 'inclusive', target: stepping(motions.wordEndBack) }],
+  ['gE', { kind: 'inclusive', target: stepping(motions.bigWordEndBack) }],
+  ['%', { kind: 'inclusive', target: (text, pos) => motions.matchPair(text, pos) ?? pos }],
   ['0', { kind: 'exclusive', target: stepping(motions.lineHome) }],
   ['^', { kind: 'exclusive', target: stepping(motions.lineFirst) }],
   ['$', { kind: 'inclusive', target: stepping(motions.lineLast) }],
@@ -60,23 +71,33 @@ const MOTIONS: ReadonlyMap<string, MotionSpec> = new Map([
   ['gg', { kind: 'linewise', target: (text, _pos, count) => motions.fileStart(text, count) }],
 ] satisfies [string, MotionSpec][])
 
-/** `dw` stops at the end of the line when the last word it covers is the last one on that line. */
-const OPERATOR_WORD: MotionSpec = {
+/** `dw` stops at the end of the line when the last word it covers is the last one on that line; `dW` the same for WORDs. */
+const operatorWord = (forward: motions.Motion): MotionSpec => ({
   kind: 'exclusive',
   target: (text, pos, count) => {
-    const current = motions.repeat(motions.wordForward, text, pos, times(count) - 1)
-    const next = motions.wordForward(text, current)
+    const current = motions.repeat(forward, text, pos, times(count) - 1)
+    const next = forward(text, current)
     const lineBreak = text.indexOf('\n', current)
 
     return lineBreak !== -1 && lineBreak < next ? lineBreak : next
   },
-}
+})
 
-/** `cw` on a word changes to the end of the word, like `ce`, so it leaves the space behind it alone. */
-const CHANGE_WORD: MotionSpec = {
+/** `cw` on a word changes to the end of the word, like `ce`, so it leaves the space behind it alone; `cW` acts as `cE`. */
+const changeWord = (end: motions.Motion, runEnd: motions.Motion): MotionSpec => ({
   kind: 'inclusive',
-  target: (text, pos, count) => motions.repeat(motions.wordEnd, text, motions.runEnd(text, pos), times(count) - 1),
-}
+  target: (text, pos, count) => motions.repeat(end, text, runEnd(text, pos), times(count) - 1),
+})
+
+const OPERATOR_WORDS: ReadonlyMap<string, MotionSpec> = new Map([
+  ['w', operatorWord(motions.wordForward)],
+  ['W', operatorWord(motions.bigWordForward)],
+])
+
+const CHANGE_WORDS: ReadonlyMap<string, MotionSpec> = new Map([
+  ['w', changeWord(motions.wordEnd, motions.runEnd)],
+  ['W', changeWord(motions.bigWordEnd, motions.bigRunEnd)],
+])
 
 /** Keys that name another key, so one rule serves both: arrows, Home, End and the delete keys. */
 const KEY_ALIASES: ReadonlyMap<string, string> = new Map([
@@ -102,7 +123,7 @@ const SHORTCUT_OPERATORS: ReadonlyMap<string, readonly [Operator, string]> = new
 ])
 
 function isOperator(key: string): key is Operator {
-  return key === 'd' || key === 'c' || key === 'y'
+  return key === 'd' || key === 'c' || key === 'y' || key === '>' || key === '<'
 }
 
 function isFindKind(key: string): key is FindKind {
@@ -119,6 +140,29 @@ function pendingFind(pending: string): { readonly operator: Operator | null; rea
   if (operator === '') return { operator: null, kind }
 
   return isOperator(operator) ? { operator, kind } : null
+}
+
+/** The operator, direction and query of a search that waits for Enter (`/word`, `d?x`), or null. */
+function pendingSearch(pending: string): { readonly operator: Operator | null; readonly backward: boolean; readonly query: string } | null {
+  const match = /^([dcy<>]?)([/?])(.*)$/su.exec(pending)
+
+  if (match === null) return null
+
+  const [, operator = '', slash, query = ''] = match
+
+  return { operator: isOperator(operator) ? operator : null, backward: slash === '?', query }
+}
+
+/** The operator and the side a pending string waits on for a text object (`di`, `ca`, `i` in visual mode), or null. */
+function pendingObject(pending: string): { readonly operator: Operator | null; readonly around: boolean } | null {
+  const side = pending.slice(-1)
+  const operator = pending.slice(0, -1)
+
+  if (side !== 'i' && side !== 'a') return null
+
+  if (operator === '') return { operator: null, around: side === 'a' }
+
+  return isOperator(operator) ? { operator, around: side === 'a' } : null
 }
 
 /** `f` and `t` reach through their target; `F` and `T` stop in front of it, as Vim has it. */
@@ -229,9 +273,38 @@ function deleteLines(state: VimState, text: string, range: TextRange): VimResult
   return deleteEdit({ ...state, register }, { start: from, end: to }, firstNonBlank(rest, from))
 }
 
+/** Changes the case of every letter: `~` turns it round, visual `u` and `U` make it lower or upper case. */
+function recase(text: string, how: '~' | 'u' | 'U'): string {
+  if (how === 'u') return text.toLowerCase()
+
+  if (how === 'U') return text.toUpperCase()
+
+  return [...text].map((char) => (char === char.toUpperCase() ? char.toLowerCase() : char.toUpperCase())).join('')
+}
+
+/** `>` and `<` over the lines a range touches; `>` leaves empty lines alone, as Vim does. The cursor goes to the first non-blank. */
+function shiftLines(state: VimState, operator: '>' | '<', text: string, range: TextRange): VimResult {
+  const from = lineStart(text, range.start)
+  const to = lineEnd(text, range.end > range.start ? range.end - 1 : range.start)
+  const block = text.slice(from, to)
+
+  const shifted = block
+    .split('\n')
+    .map((line) => (operator === '>' ? (line.trim() === '' ? line : `${SHIFT}${line}`) : line.replace(/^(?: {1,4}|\t)/u, '')))
+    .join('\n')
+
+  if (shifted === block) return VimResult.Stay({ state })
+
+  const cursor = firstNonBlank(text.slice(0, from) + shifted + text.slice(to), from)
+
+  return VimResult.Edit({ state, edit: { from, to, insert: shifted, selectionStart: cursor, selectionEnd: cursor }, yank: null })
+}
+
 function operate(state: VimState, operator: Operator, text: string, pos: number, operand: Operand): VimResult {
   const { range, linewise } = operand
   const settledState = settled(state)
+
+  if (operator === '>' || operator === '<') return shiftLines(settledState, operator, text, range)
   const taken = text.slice(range.start, range.end)
   const register = { text: linewise ? `${taken}\n` : taken, linewise }
 
@@ -259,11 +332,13 @@ function operate(state: VimState, operator: Operator, text: string, pos: number,
   return deleteEdit({ ...settledState, register }, range, clampNormal(rest, range.start))
 }
 
-/** The motion an operator uses for a key, with the two cases where Vim bends `w`. */
+/** The motion an operator uses for a key, with the two cases where Vim bends `w` and `W`. */
 function specFor(operator: Operator, key: string, text: string, pos: number): MotionSpec | undefined {
-  if (key !== 'w') return MOTIONS.get(key)
+  const change = CHANGE_WORDS.get(key)
 
-  return operator === 'c' && motions.isNonBlank(text[pos]) ? CHANGE_WORD : OPERATOR_WORD
+  if (operator === 'c' && change !== undefined && motions.isNonBlank(text[pos])) return change
+
+  return OPERATOR_WORDS.get(key) ?? MOTIONS.get(key)
 }
 
 function paste(state: VimState, text: string, pos: number, before: boolean): VimResult {
@@ -389,11 +464,18 @@ function repeatFind(state: VimState, key: string, operator: Operator | null, tex
 function operatorKey(state: VimState, operator: Operator, key: string, text: string, pos: number): VimResult {
   if (key === operator) return operate(state, operator, text, pos, linesOperand(text, pos, totalCount(state)))
 
-  if (key === 'g') return VimResult.Stay({ state: { ...state, pending: `${operator}g` } })
+  if (key === 'g' || key === 'i' || key === 'a') return VimResult.Stay({ state: { ...state, pending: `${operator}${key}` } })
 
   if (isFindKind(key)) return awaitFind(state, operator, key)
 
   if (key === ';' || key === ',') return repeatFind(state, key, operator, text, pos)
+
+  if (key === '/' || key === '?') return awaitSearch(state, operator, key)
+
+  if (key === 'n' || key === 'N' || key === '*' || key === '#') return searchKeyMotion(state, key, operator, text, pos)
+
+  // `%` with no bracket on the line has nowhere to go, so the operator takes nothing
+  if (key === '%' && motions.matchPair(text, pos) === null) return VimResult.Stay({ state: settled(state) })
 
   const spec = specFor(operator, key, text, pos)
 
@@ -424,7 +506,21 @@ function normalKey(state: VimState, key: string, text: string, pos: number, rows
     case 'd':
     case 'c':
     case 'y':
+    case '>':
+    case '<':
       return VimResult.Stay({ state: { ...state, pending: key, operatorCount: state.count, count: 0 } })
+    case 'r':
+      return VimResult.Stay({ state: { ...state, pending: 'r' } })
+    case '~':
+      return toggleCase(state, text, pos)
+    case '/':
+    case '?':
+      return awaitSearch(state, null, key)
+    case 'n':
+    case 'N':
+    case '*':
+    case '#':
+      return searchKeyMotion(state, key, null, text, pos)
     case 'Y':
       return operate(state, 'y', text, pos, linesOperand(text, pos, state.count))
     case 'S':
@@ -531,7 +627,9 @@ function visualKey(state: VimState, key: string, text: string, cursor: number, r
 
   switch (key) {
     case 'g':
-      return VimResult.Stay({ state: { ...state, pending: 'g' } })
+    case 'i':
+    case 'a':
+      return VimResult.Stay({ state: { ...state, pending: key } })
     case 'f':
     case 'F':
     case 't':
@@ -549,6 +647,23 @@ function visualKey(state: VimState, key: string, text: string, cursor: number, r
     case 'p':
     case 'P':
       return visualPut(state, key, text, cursor)
+    case 'r':
+      return VimResult.Stay({ state: { ...state, pending: 'r' } })
+    case '~':
+    case 'u':
+    case 'U':
+      return visualCase(state, key, text, cursor)
+    case '>':
+    case '<':
+      return shiftLines(settled(state, 'normal'), key, text, selectionOf(state, text, cursor))
+    case '/':
+    case '?':
+      return awaitSearch(state, null, key)
+    case 'n':
+    case 'N':
+    case '*':
+    case '#':
+      return searchKeyMotion(state, key, null, text, cursor)
     case 'y':
     case 'd':
     case 'x':
@@ -559,15 +674,180 @@ function visualKey(state: VimState, key: string, text: string, cursor: number, r
   }
 }
 
-/** A key that waits on `g` (`gg`, `dgg`): anything but a second `g` cancels. */
+/** The text a visual selection covers, charwise or linewise. */
+function selectionOf(state: VimState, text: string, cursor: number): TextRange {
+  return state.mode === 'visual-line' ? visualLineRange(text, state.visualAnchor, cursor) : visualRange(text, state.visualAnchor, cursor)
+}
+
+/** `~` in normal mode: turns the case of `count` characters round and moves past them, never off the line. */
+function toggleCase(state: VimState, text: string, pos: number): VimResult {
+  const end = lineEnd(text, pos)
+  let to = pos
+
+  for (let step = 0; step < times(state.count) && to < end; step += 1) to += charLength(text, to)
+
+  if (to === pos) return VimResult.Stay({ state: settled(state) })
+
+  const insert = recase(text.slice(pos, to), '~')
+  const cursor = clampNormal(text.slice(0, pos) + insert + text.slice(to), pos + insert.length)
+
+  return VimResult.Edit({ state: settled(state), edit: { from: pos, to, insert, selectionStart: cursor, selectionEnd: cursor }, yank: null })
+}
+
+/** `~`, `u` and `U` on the selection. */
+function visualCase(state: VimState, key: '~' | 'u' | 'U', text: string, cursor: number): VimResult {
+  const range = selectionOf(state, text, cursor)
+  const insert = recase(text.slice(range.start, range.end), key)
+  const caret = clampNormal(text.slice(0, range.start) + insert + text.slice(range.end), range.start)
+
+  return VimResult.Edit({ state: settled(state, 'normal'), edit: { from: range.start, to: range.end, insert, selectionStart: caret, selectionEnd: caret }, yank: null })
+}
+
+/**
+`r` waits for one character and puts it in place of `count` characters (all of the selection in visual mode).
+`r` and Enter breaks the line there. Too few characters left on the line cancels, as in Vim.
+*/
+function replaceKey(state: VimState, input: VimKey, text: string, selection: TextRange): VimResult {
+  const char = commandName(input) === 'Enter' ? '\n' : typedChar(input)
+
+  if (char === null) return MODIFIER_KEYS.has(input.key) ? VimResult.Stay({ state }) : VimResult.Stay({ state: settled(state) })
+
+  const cursor = cursorOf(state, text, selection)
+
+  if (isVisual(state.mode)) {
+    if (char === '\n') return VimResult.Stay({ state: settled(state) })
+
+    const range = selectionOf(state, text, cursor)
+    const insert = [...GRAPHEMES.segment(text.slice(range.start, range.end))].map(({ segment }) => (segment === '\n' ? segment : char)).join('')
+
+    return VimResult.Edit({ state: settled(state, 'normal'), edit: { from: range.start, to: range.end, insert, selectionStart: range.start, selectionEnd: range.start }, yank: null })
+  }
+
+  const end = lineEnd(text, cursor)
+  let to = cursor
+
+  for (let step = 0; step < times(state.count); step += 1) {
+    if (to >= end) return VimResult.Stay({ state: settled(state) })
+
+    to += charLength(text, to)
+  }
+
+  const insert = char === '\n' ? char : char.repeat(times(state.count))
+  const caret = char === '\n' ? cursor + 1 : cursor + insert.length - char.length
+
+  return VimResult.Edit({ state: settled(state), edit: { from: cursor, to, insert, selectionStart: caret, selectionEnd: caret }, yank: null })
+}
+
+/** Starts typing a search; the count so far moves to the front, as for a find. */
+function awaitSearch(state: VimState, operator: Operator | null, slash: '/' | '?'): VimResult {
+  return VimResult.Stay({ state: { ...state, pending: `${operator ?? ''}${slash}`, operatorCount: totalCount(state), count: 0 } })
+}
+
+/** Moves to a search's match, or applies the operator up to it (exclusive, like `w`). A miss changes nothing. */
+function searchMove(state: VimState, operator: Operator | null, search: motions.Search, backward: boolean, text: string, pos: number): VimResult {
+  const target = motions.searchTarget(text, pos, search, backward, times(totalCount(state)))
+
+  if (target === null) return VimResult.Stay({ state: settled(state) })
+
+  if (operator === null) return moveTo(state, text, { pos: clampNormal(text, target), goalX: null })
+
+  return operate(state, operator, text, pos, operandOf(text, pos, { kind: 'exclusive', target: () => target }, 0))
+}
+
+/** `n` and `N` repeat the last search the same or the other way; `*` and `#` search the whole word under the cursor forward or back. */
+function searchKeyMotion(state: VimState, key: 'n' | 'N' | '*' | '#', operator: Operator | null, text: string, pos: number): VimResult {
+  if (key === 'n' || key === 'N') {
+    const last = state.lastSearch
+
+    return last === null ? VimResult.Stay({ state: settled(state) }) : searchMove(state, operator, last, key === 'N' ? !last.backward : last.backward, text, pos)
+  }
+
+  if (!/[\p{L}\p{N}_]/u.test(text[pos] ?? '')) return VimResult.Stay({ state: settled(state) })
+
+  const start = motions.wordBack(text, pos + 1)
+  const search = { query: text.slice(start, motions.runEnd(text, pos) + 1), backward: key === '#', word: true }
+
+  return searchMove({ ...state, lastSearch: search }, operator, search, search.backward, text, start)
+}
+
+/** Typing a search: characters add to it, Backspace takes one away (on an empty search it cancels), Enter runs it, Escape cancels. */
+function searchKey(state: VimState, input: VimKey, text: string, selection: TextRange, waiting: NonNullable<ReturnType<typeof pendingSearch>>): VimResult {
+  if (commandName(input) === 'Escape') return VimResult.Stay({ state: settled(state) })
+
+  if (input.key === 'Backspace') {
+    if (waiting.query === '') return VimResult.Stay({ state: settled(state) })
+
+    const graphemes = [...GRAPHEMES.segment(state.pending)]
+
+    return VimResult.Stay({ state: { ...state, pending: graphemes.slice(0, -1).map(({ segment }) => segment).join('') } })
+  }
+
+  if (input.key === 'Enter') {
+    const query = waiting.query === '' ? (state.lastSearch?.query ?? '') : waiting.query
+
+    if (query === '') return VimResult.Stay({ state: settled(state) })
+
+    const search = { query, backward: waiting.backward, word: false }
+
+    return searchMove({ ...state, lastSearch: search }, waiting.operator, search, search.backward, text, cursorOf(state, text, selection))
+  }
+
+  const char = typedChar(input)
+
+  return VimResult.Stay({ state: char === null ? state : { ...state, pending: `${state.pending}${char}` } })
+}
+
+/**
+A text object after an operator (`diw`, `ca"`) or in visual mode (`vi(`). A key that names no object, or an object
+that is not there, cancels.
+*/
+function objectKey(state: VimState, key: string, text: string, cursor: number, operator: Operator | null, around: boolean): VimResult {
+  if (!isObjectKey(key)) return VimResult.Stay({ state: settled(state) })
+
+  if (operator !== null) {
+    const object = textObject(text, cursor, key, around, times(totalCount(state)))
+
+    return object === null ? VimResult.Stay({ state: settled(state) }) : operate(state, operator, text, cursor, object)
+  }
+
+  return visualObject(state, key, text, cursor, around)
+}
+
+/**
+A text object selects itself in visual mode; an object made of lines (`ip`) makes the selection linewise.
+When the selection is already bigger than one character, `aw` `is` `ip` take the next one from the cursor on,
+and quotes, brackets and tags take the next pair around the selection.
+*/
+function visualObject(state: VimState, key: string, text: string, cursor: number, around: boolean): VimResult {
+  const current = state.mode === 'visual-line' ? visualLineRange(text, state.visualAnchor, cursor) : visualRange(text, state.visualAnchor, cursor)
+  const growing = state.mode === 'visual-line' ? lineStart(text, state.visualAnchor) !== lineStart(text, cursor) : cursor !== state.visualAnchor
+  const count = times(totalCount(state))
+  let object = textObject(text, growing && isStretching(key) ? current.end : cursor, key, around, count)
+
+  // quotes have no outer pair, so the search gives up after a few rounds instead of finding the same pair forever
+  for (let outer = count + 1; growing && !isStretching(key) && outer < count + 50 && object !== null && object.range.start >= current.start && object.range.end <= current.end; outer += 1) {
+    object = textObject(text, cursor, key, around, outer)
+  }
+
+  if (object === null || object.range.start === object.range.end) return VimResult.Stay({ state: settled(state) })
+
+  const start = growing && isStretching(key) ? Math.min(current.start, object.range.start) : object.range.start
+  const last = clampNormal(text, previousChar(text, object.range.end))
+
+  return enterVisual(state, text, object.linewise ? 'visual-line' : 'visual', start, object.linewise ? last : previousChar(text, object.range.end))
+}
+
+/** A key that waits on `g` (`gg`, `ge`, `gE`, `dgg`): anything else cancels. */
 function gotoKey(state: VimState, key: string, text: string, pos: number, rows: RowMotion): VimResult {
-  if (key !== 'g') return VimResult.Stay({ state: settled(state) })
+  const name = `g${key}`
+
+  if (!MOTIONS.has(name)) return VimResult.Stay({ state: settled(state) })
 
   const operator = state.pending.slice(0, -1)
 
-  if (isOperator(operator)) return operatorKey({ ...state, pending: operator }, operator, 'gg', text, pos)
+  if (isOperator(operator)) return operatorKey({ ...state, pending: operator }, operator, name, text, pos)
 
-  const target = landing(state, 'gg', text, pos, rows)
+  const target = landing(state, name, text, pos, rows)
 
   return target === null ? VimResult.Stay({ state: settled(state) }) : moveTo(state, text, target)
 }
@@ -616,14 +896,17 @@ function insertKey(state: VimState, input: VimKey, text: string, selection: Text
   return VimResult.Move({ state: settled(state, 'normal'), selection: collapsed(cursor), yank: null })
 }
 
-/**
-Runs one key through the Vim layer.
-`selection` is the textarea's selection and `rows` moves by wrapped row; the result says what the editor does next.
-*/
-export function handleKey(state: VimState, input: VimKey, text: string, selection: TextRange, rows: RowMotion): VimResult {
+/** Runs one key through the Vim layer, without `.`: the result says what the editor does next. */
+function step(state: VimState, input: VimKey, text: string, selection: TextRange, rows: RowMotion): VimResult {
   if (input.metaKey || input.altKey) return VimResult.Pass()
 
   if (state.mode === 'insert') return insertKey(state, input, text, selection)
+
+  const search = pendingSearch(state.pending)
+
+  if (search !== null) return searchKey(state, input, text, selection, search)
+
+  if (state.pending === 'r') return replaceKey(state, input, text, selection)
 
   const waiting = pendingFind(state.pending)
 
@@ -645,9 +928,166 @@ export function handleKey(state: VimState, input: VimKey, text: string, selectio
 
   if (counting && isDigit(key) && (key !== '0' || state.count > 0)) return VimResult.Stay({ state: { ...state, count: state.count * 10 + Number(key) } })
 
+  const object = pendingObject(state.pending)
+
+  if (object !== null) return objectKey(state, key, text, cursor, object.operator, object.around)
+
   if (state.pending.endsWith('g')) return gotoKey(state, key, text, cursor, rows)
 
   if (isOperator(state.pending)) return operatorKey(state, state.pending, key, text, cursor)
 
   return isVisual(state.mode) ? visualKey(state, key, text, cursor, rows) : normalKey(state, key, text, cursor, rows)
+}
+
+const ESCAPE: VimKey = { key: 'Escape', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false }
+
+function stateOf(result: VimResult): VimState | null {
+  return VimResult.$is('Pass')(result) ? null : result.state
+}
+
+function withState(result: VimResult, state: VimState): VimResult {
+  return VimResult.$match(result, {
+    Pass: () => result,
+    Stay: () => VimResult.Stay({ state }),
+    Move: ({ selection, yank }) => VimResult.Move({ state, selection, yank }),
+    Edit: ({ edit, yank }) => VimResult.Edit({ state, edit, yank }),
+    Undo: () => VimResult.Undo({ state }),
+    Redo: () => VimResult.Redo({ state }),
+  })
+}
+
+/** One edit that turns `before` into `after`: whatever lies between their common start and their common end. */
+function diffEdit(before: string, after: string, selection: TextRange): TextEdit {
+  let head = 0
+
+  while (head < before.length && head < after.length && before[head] === after[head]) head += 1
+
+  let tail = 0
+
+  while (tail < before.length - head && tail < after.length - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail += 1
+
+  return { from: head, to: before.length - tail, insert: after.slice(head, after.length - tail), selectionStart: selection.start, selectionEnd: selection.end }
+}
+
+/** The command keys with their count swapped for `count` (`3.`), or as they were when no count was typed. */
+function recount(keys: readonly VimKey[], count: number): readonly VimKey[] {
+  if (count === 0) return keys
+
+  const first = keys.findIndex((key) => !isDigit(key.key))
+  const digits = [...String(count)].map((key) => ({ ...ESCAPE, key }))
+
+  return [...digits, ...keys.slice(first === -1 ? keys.length : first)]
+}
+
+/**
+`.`: plays the last change again at the cursor, typed text included, and hands the editor one edit for all of it,
+so a single undo takes it back.
+*/
+function repeatChange(state: VimState, text: string, selection: TextRange, rows: RowMotion): VimResult {
+  const change = state.lastChange
+
+  if (change === null) return VimResult.Stay({ state: settled(state) })
+
+  let current: VimState = settled(state)
+  let doc = text
+  let caret = selection
+
+  const play = (input: VimKey): void => {
+    VimResult.$match(step(current, input, doc, caret, rows), {
+      Pass: () => undefined,
+      Stay: ({ state: next }) => {
+        current = next
+      },
+      Move: ({ state: next, selection: moved }) => {
+        current = next
+        caret = moved
+      },
+      Edit: ({ state: next, edit }) => {
+        current = next
+        doc = doc.slice(0, edit.from) + edit.insert + doc.slice(edit.to)
+        caret = { start: edit.selectionStart, end: edit.selectionEnd }
+      },
+      Undo: ({ state: next }) => {
+        current = next
+      },
+      Redo: ({ state: next }) => {
+        current = next
+      },
+    })
+  }
+
+  for (const input of recount(change.keys, state.count)) play(input)
+
+  if (current.mode === 'insert') {
+    if (change.inserted !== null) {
+      doc = doc.slice(0, caret.start) + change.inserted + doc.slice(caret.end)
+      caret = collapsed(caret.start + change.inserted.length)
+    }
+
+    play(ESCAPE)
+  }
+
+  const next = { ...current, recording: [], lastChange: change, insertFrom: null }
+
+  return doc === text ? VimResult.Move({ state: next, selection: caret, yank: null }) : VimResult.Edit({ state: next, edit: diffEdit(text, doc, caret), yank: null })
+}
+
+/** What insert mode starts from after a result: the caret, and the length of the text once the result's edit is in. */
+function insertMark(result: VimResult, text: string, selection: TextRange): VimState['insertFrom'] {
+  return VimResult.$match(result, {
+    Edit: ({ edit }) => ({ pos: edit.selectionStart, length: text.length - (edit.to - edit.from) + edit.insert.length }),
+    Move: ({ selection: moved }) => ({ pos: moved.start, length: text.length }),
+    Pass: () => ({ pos: selection.start, length: text.length }),
+    Stay: () => ({ pos: selection.start, length: text.length }),
+    Undo: () => ({ pos: selection.start, length: text.length }),
+    Redo: () => ({ pos: selection.start, length: text.length }),
+  })
+}
+
+/** The text typed since insert mode began, when the caret is still at its end; null when the typing went elsewhere. */
+function typedSince(state: VimState, text: string, selection: TextRange): string | null {
+  const mark = state.insertFrom
+
+  if (mark === null) return null
+
+  const grown = text.length - mark.length
+
+  return grown >= 0 && selection.end === mark.pos + grown ? text.slice(mark.pos, selection.end) : null
+}
+
+/** Remembers the keys of a normal-mode command as it is typed, and the command as the last change once it edits or starts insert mode. */
+function record(before: VimState, input: VimKey, result: VimResult, text: string, selection: TextRange): VimResult {
+  const after = stateOf(result)
+
+  if (after === null) return result
+
+  if (before.mode === 'insert') {
+    if (after.mode === 'insert' || before.lastChange === null || before.insertFrom === null) return result
+
+    return withState(result, { ...after, lastChange: { ...before.lastChange, inserted: typedSince(before, text, selection) }, insertFrom: null })
+  }
+
+  if (before.mode !== 'normal') return withState(result, { ...after, recording: [] })
+
+  const keys = [...before.recording, input]
+
+  if (after.mode === 'normal' && (after.pending !== '' || after.count > 0 || after.operatorCount > 0)) return withState(result, { ...after, recording: keys })
+
+  if (!VimResult.$is('Edit')(result) && after.mode !== 'insert') return withState(result, { ...after, recording: [] })
+
+  const change: Change = { keys, inserted: null }
+
+  return withState(result, { ...after, recording: [], lastChange: change, insertFrom: after.mode === 'insert' ? insertMark(result, text, selection) : null })
+}
+
+/**
+Runs one key through the Vim layer.
+`selection` is the textarea's selection and `rows` moves by wrapped row; the result says what the editor does next.
+*/
+export function handleKey(state: VimState, input: VimKey, text: string, selection: TextRange, rows: RowMotion): VimResult {
+  if (state.mode === 'normal' && state.pending === '' && !input.metaKey && !input.altKey && !input.ctrlKey && input.key === '.') {
+    return repeatChange(state, text, selection, rows)
+  }
+
+  return record(state, input, step(state, input, text, selection, rows), text, selection)
 }

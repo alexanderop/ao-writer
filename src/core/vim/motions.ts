@@ -12,13 +12,22 @@ const WORD_CHAR = /[\p{L}\p{N}_]/u
 
 type CharClass = 'word' | 'punctuation' | 'blank' | 'break'
 
-function classOf(char: string): CharClass {
+export function classOf(char: string): CharClass {
   if (char === '\n') return 'break'
 
   if (char === ' ' || char === '\t' || char === '\r') return 'blank'
 
   return WORD_CHAR.test(char) ? 'word' : 'punctuation'
 }
+
+/** WORD classes for `W` `B` `E`: anything that is not a blank belongs to the same WORD. */
+export function bigClassOf(char: string): CharClass {
+  const kind = classOf(char)
+
+  return kind === 'punctuation' ? 'word' : kind
+}
+
+type Classify = (char: string) => CharClass
 
 /** True for a letter, digit, underscore or punctuation character; false for blanks, line breaks and nothing. */
 export function isNonBlank(char: string | undefined): boolean {
@@ -55,17 +64,18 @@ export const left: Motion = (text, pos) => (pos > lineStart(text, pos) ? previou
 /** `l`: one character right, up to the end of the line. */
 export const right: Motion = (text, pos) => pos + charLength(text, pos)
 
-/** `w`: the start of the next word; a run of punctuation is a word, and so is an empty line. */
-export const wordForward: Motion = (text, pos) => {
+const forwardBy =
+  (classify: Classify): Motion =>
+  (text, pos) => {
   let index = pos
   const first = text[index]
 
   if (first === undefined) return text.length
 
-  const kind = classOf(first)
+  const kind = classify(first)
 
   if (kind === 'word' || kind === 'punctuation') {
-    while (index < text.length && classOf(text[index] ?? '\n') === kind) index += 1
+    while (index < text.length && classify(text[index] ?? '\n') === kind) index += 1
   } else if (kind === 'break') {
     index += 1
   }
@@ -83,8 +93,15 @@ export const wordForward: Motion = (text, pos) => {
   return text.length
 }
 
-/** `b`: the start of the word before the cursor, or of the current word when the cursor is inside it. */
-export const wordBack: Motion = (text, pos) => {
+/** `w`: the start of the next word; a run of punctuation is a word, and so is an empty line. */
+export const wordForward = forwardBy(classOf)
+
+/** `W`: the start of the next WORD, which ends only at a blank. */
+export const bigWordForward = forwardBy(bigClassOf)
+
+const backBy =
+  (classify: Classify): Motion =>
+  (text, pos) => {
   let index = pos - 1
 
   while (index > 0) {
@@ -99,40 +116,91 @@ export const wordBack: Motion = (text, pos) => {
 
   if (index <= 0) return 0
 
-  const kind = classOf(text[index] ?? '')
+  const kind = classify(text[index] ?? '')
 
-  while (index > 0 && classOf(text[index - 1] ?? '\n') === kind) index -= 1
+  while (index > 0 && classify(text[index - 1] ?? '\n') === kind) index -= 1
+
+  return index
+}
+
+/** `b`: the start of the word before the cursor, or of the current word when the cursor is inside it. */
+export const wordBack = backBy(classOf)
+
+/** `B`: the same for WORDs. */
+export const bigWordBack = backBy(bigClassOf)
+
+const endBy =
+  (classify: Classify): Motion =>
+  (text, pos) => {
+  let index = pos + 1
+
+  while (index < text.length && (classify(text[index] ?? '') === 'blank' || text[index] === '\n')) index += 1
+
+  if (index >= text.length) return Math.max(pos, text.length - 1)
+
+  const kind = classify(text[index] ?? '')
+
+  while (index + 1 < text.length && classify(text[index + 1] ?? '\n') === kind) index += 1
 
   return index
 }
 
 /** `e`: the last character of the next word (of this word, when the cursor is not on its last character). */
-export const wordEnd: Motion = (text, pos) => {
-  let index = pos + 1
+export const wordEnd = endBy(classOf)
 
-  while (index < text.length && (classOf(text[index] ?? '') === 'blank' || text[index] === '\n')) index += 1
+/** `E`: the same for WORDs. */
+export const bigWordEnd = endBy(bigClassOf)
 
-  if (index >= text.length) return Math.max(pos, text.length - 1)
+const endBackBy =
+  (classify: Classify): Motion =>
+  (text, pos) => {
+  let index = pos
+  const kind = classify(text[index] ?? '\n')
 
-  const kind = classOf(text[index] ?? '')
+  if (kind === 'word' || kind === 'punctuation') {
+    while (index > 0 && classify(text[index - 1] ?? '\n') === kind) index -= 1
+  }
 
-  while (index + 1 < text.length && classOf(text[index + 1] ?? '\n') === kind) index += 1
+  index -= 1
 
-  return index
+  while (index > 0) {
+    if (isEmptyLine(text, index)) return index
+
+    const char = classify(text[index] ?? '\n')
+
+    if (char !== 'blank' && char !== 'break') return index
+
+    index -= 1
+  }
+
+  return Math.max(index, 0)
 }
 
-/** The last character of the word or punctuation run under `pos`; `pos` itself on blanks. */
-export const runEnd: Motion = (text, pos) => {
-  const kind = classOf(text[pos] ?? '\n')
+/** `ge`: the last character of the word before the cursor's. */
+export const wordEndBack = endBackBy(classOf)
+
+/** `gE`: the same for WORDs. */
+export const bigWordEndBack = endBackBy(bigClassOf)
+
+const runEndBy =
+  (classify: Classify): Motion =>
+  (text, pos) => {
+  const kind = classify(text[pos] ?? '\n')
 
   if (kind === 'blank' || kind === 'break') return pos
 
   let index = pos
 
-  while (index + 1 < text.length && classOf(text[index + 1] ?? '\n') === kind) index += 1
+  while (index + 1 < text.length && classify(text[index + 1] ?? '\n') === kind) index += 1
 
   return index
 }
+
+/** The last character of the word or punctuation run under `pos`; `pos` itself on blanks. */
+export const runEnd = runEndBy(classOf)
+
+/** The last character of the WORD under `pos`. */
+export const bigRunEnd = runEndBy(bigClassOf)
 
 /** `0`: the start of the line. */
 export const lineHome: Motion = (text, pos) => lineStart(text, pos)
@@ -229,4 +297,90 @@ export function findTarget(text: string, pos: number, find: Find, count: number,
     case 'T':
       return found + find.char.length
   }
+}
+
+const PAIRS: ReadonlyMap<string, readonly [string, string, 1 | -1]> = new Map([
+  ['(', ['(', ')', 1]],
+  ['[', ['[', ']', 1]],
+  ['{', ['{', '}', 1]],
+  [')', [')', '(', -1]],
+  [']', [']', '[', -1]],
+  ['}', ['}', '{', -1]],
+])
+
+/** `%`: the partner of the first bracket at or after the cursor on its line, across lines; null when there is none. */
+export function matchPair(text: string, pos: number): number | null {
+  const end = lineEnd(text, pos)
+  let from = pos
+
+  while (from < end && !PAIRS.has(text[from] ?? '')) from += 1
+
+  const pair = PAIRS.get(text[from] ?? '')
+
+  if (pair === undefined) return null
+
+  const [self, partner, direction] = pair
+  let depth = 0
+
+  for (let index = from + direction; index >= 0 && index < text.length; index += direction) {
+    if (text[index] === self) depth += 1
+
+    if (text[index] !== partner) continue
+
+    if (depth === 0) return index
+
+    depth -= 1
+  }
+
+  return null
+}
+
+/** A search as `n` and `N` repeat it. */
+export interface Search {
+  readonly query: string
+  readonly backward: boolean
+  /** `*` and `#` match whole words only. */
+  readonly word: boolean
+}
+
+/**
+Where a search lands: the `count`th match after (or before) `pos`, wrapping around the end of the text; null when there is none.
+A query without capitals ignores case (Vim's `smartcase`).
+*/
+export function searchTarget(text: string, pos: number, search: Search, backward: boolean, count: number): number | null {
+  const ignoreCase = search.query === search.query.toLowerCase() && text.toLowerCase().length === text.length
+  const hay = ignoreCase ? text.toLowerCase() : text
+  const query = ignoreCase ? search.query.toLowerCase() : search.query
+  const isWordAt = (index: number): boolean => WORD_CHAR.test(hay[index] ?? ' ')
+  const fits = (index: number): boolean => !search.word || (!isWordAt(index - 1) && !isWordAt(index + query.length))
+
+  const next = (from: number): number => {
+    for (let index = hay.indexOf(query, from); index !== -1; index = hay.indexOf(query, index + 1)) {
+      if (fits(index)) return index
+    }
+
+    return -1
+  }
+
+  const previous = (from: number): number => {
+    for (let index = from < 0 ? -1 : hay.lastIndexOf(query, from); index !== -1; index = index === 0 ? -1 : hay.lastIndexOf(query, index - 1)) {
+      if (fits(index)) return index
+    }
+
+    return -1
+  }
+
+  let at = pos
+
+  if (query === '') return null
+
+  for (let step = 0; step < count; step += 1) {
+    const found = backward ? (previous(at - 1) === -1 ? previous(hay.length) : previous(at - 1)) : next(at + 1) === -1 ? next(0) : next(at + 1)
+
+    if (found === -1) return null
+
+    at = found
+  }
+
+  return at
 }

@@ -51,8 +51,8 @@ In:
 9. Documents saved in the browser (OPFS, falling back to IndexedDB), a simple
    library sidebar (new, rename, delete, switch), autosave.
 10. Optional Vim keybindings (not part of iA Writer; off by default): normal,
-    insert and charwise visual mode, the common motions, operators and
-    registers, `j`/`k` by wrapped row. A pure layer in `src/core/vim`.
+    insert and charwise visual mode, the common motions, operators,
+    text objects, search, `.` repeat and registers, `j`/`k` by wrapped row. A pure layer in `src/core/vim`.
 
 Out (later): authorship tracking, templates, export, wikilinks, content
 blocks, French/German, custom patterns.

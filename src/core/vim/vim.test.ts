@@ -902,7 +902,7 @@ describe('visual mode', () => {
   })
 
   it('swallows keys that would insert', () => {
-    const session = new Session('|abc').press('vip')
+    const session = new Session('|abc').press('vqzQ')
 
     expect(session.text).toBe('abc')
     expect(session.mode).toBe('visual')
@@ -1299,5 +1299,379 @@ describe('counts', () => {
     const session = new Session('|abc').press('2l')
 
     expect(session.state.count).toBe(0)
+  })
+})
+
+describe('text objects', () => {
+  describe('words', () => {
+    it('iw takes the word, the punctuation run or the blanks under the cursor', () => {
+      expect(view('one t|wo three', 'diw')).toBe('one | three')
+      expect(view('one two|.three', 'diw')).toBe('one two|three')
+      expect(view('one |  two', 'diw')).toBe('one|two')
+      expect(view('one t|wo three', 'd2iw')).toBe('one |three')
+    })
+
+    it('aw takes the blanks behind the word, or in front of it at the end of the line', () => {
+      expect(view('one t|wo three', 'daw')).toBe('one |three')
+      expect(view('one t|wo', 'daw')).toBe('on|e')
+      expect(view('o|ne two three', 'd2aw')).toBe('|three')
+      expect(view('one |  two three', 'daw')).toBe('one| three')
+    })
+
+    it('aw keeps the indent of a line with one word', () => {
+      expect(view('  w|ord', 'daw')).toBe(' | ')
+    })
+
+    it('iW and aW take everything between blanks', () => {
+      expect(view('a f|oo.bar b', 'diW')).toBe('a | b')
+      expect(view('a f|oo.bar b', 'daW')).toBe('a |b')
+    })
+
+    it('ciw changes the word and yiw yanks it', () => {
+      const session = new Session('one t|wo three').press('ciwTWO<Esc>')
+
+      expect(session.text).toBe('one TWO three')
+      expect(new Session('one t|wo').press('yiw').yanked).toEqual(['two'])
+    })
+
+    it('ciw on an empty line starts insert mode', () => {
+      expect(new Session('a\n|\nb').press('ciw').mode).toBe('insert')
+    })
+  })
+
+  describe('sentences', () => {
+    it('is takes the sentence, as also the blanks behind it', () => {
+      expect(view('One. Tw|o here. Three.', 'dis')).toBe('One. | Three.')
+      expect(view('One. Tw|o here. Three.', 'das')).toBe('One. |Three.')
+      expect(view('One. Tw|o here.', 'das')).toBe('One|.')
+    })
+
+    it('stay inside the paragraph', () => {
+      expect(view('First.\n\nSec|ond one\ngoes on. Next.', 'dis')).toBe('First.\n\n| Next.')
+    })
+  })
+
+  describe('paragraphs', () => {
+    const doc = 'one\n\ntw|o\ntwo\n\nthree'
+
+    it('ip takes the lines of the paragraph', () => {
+      const session = new Session(doc).press('dip')
+
+      expect(session.text).toBe('one\n\n\nthree')
+    })
+
+    it('ap takes the blank lines behind it, or in front of the last paragraph', () => {
+      expect(new Session(doc).press('dap').text).toBe('one\n\nthree')
+      expect(new Session('one\n\ntw|o').press('dap').text).toBe('one')
+    })
+
+    it('yip yanks lines', () => {
+      expect(new Session(doc).press('yip').yanked).toEqual(['two\ntwo\n'])
+    })
+  })
+
+  describe('quotes', () => {
+    it('i" takes the inside of the pair around the cursor, a" the quotes and the blanks behind them', () => {
+      expect(view('say "he|llo there" now', 'di"')).toBe('say "|" now')
+      expect(view('say "he|llo" now', 'da"')).toBe('say |now')
+      expect(view('say "he|llo"', 'da"')).toBe('sa|y')
+    })
+
+    it('find the next pair on the line when the cursor is outside every pair', () => {
+      expect(view('|say "hello" "you"', 'ci"x<Esc>')).toBe('say "|x" "you"')
+      expect(view('say "a" |b "c"', 'di"')).toBe('say "a" b "|"')
+    })
+
+    it('treat a quote under the cursor as part of its pair', () => {
+      expect(view('a |"b" "c"', 'di"')).toBe('a "|" "c"')
+      expect(view('a "b|" "c"', 'di"')).toBe('a "|" "c"')
+    })
+
+    it("work for ' and backticks, and skip escaped quotes", () => {
+      expect(view("it 'is| here'", "di'")).toBe("it '|'")
+      expect(view('run `np|m i` now', 'di`')).toBe('run `|` now')
+      expect(view('"a \\"q|\\" b"', 'di"')).toBe('"|"')
+    })
+
+    it('do nothing without a pair', () => {
+      expect(view('no |quotes', 'di"')).toBe('no |quotes')
+    })
+  })
+
+  describe('brackets', () => {
+    it('i( and a( take the inside or the whole pair, across lines', () => {
+      expect(view('f(a, |b)', 'di(')).toBe('f(|)')
+      expect(view('f(a, |b) x', 'da(')).toBe('f| x')
+      expect(view('f(a, |b)', 'dib')).toBe('f(|)')
+      expect(view('f(a,\n |b)', 'di)')).toBe('f(|)')
+    })
+
+    it('count nested pairs outwards', () => {
+      expect(view('f(a, g(|b))', 'di(')).toBe('f(a, g(|))')
+      expect(view('f(a, g(|b))', 'd2i(')).toBe('f(|)')
+    })
+
+    it('[ { < and B work the same way', () => {
+      expect(view('[1, |2]', 'di[')).toBe('[|]')
+      expect(view('{ |a }', 'diB')).toBe('{|}')
+      expect(view('<a hr|ef>', 'di<')).toBe('<|>')
+      expect(view('x [l|ink](url)', 'ca]y<Esc>')).toBe('x |y(url)')
+    })
+
+    it('find the next pair on the line from in front of it', () => {
+      expect(view('|call(arg)', 'ci(x<Esc>')).toBe('call(|x)')
+    })
+
+    it('take whole lines when the braces sit on their own lines', () => {
+      expect(new Session('{\n  |a\n  b\n}').press('di{').text).toBe('{\n}')
+      expect(new Session('{\n  |a\n  b\n}').press('ci{x<Esc>').text).toBe('{\nx\n}')
+    })
+
+    it('do nothing outside every pair', () => {
+      expect(view('no |pair', 'di(')).toBe('no |pair')
+    })
+  })
+
+  describe('tags', () => {
+    it('it takes the contents, at the whole element, the innermost first', () => {
+      expect(view('<p>one <b>tw|o</b></p>', 'dit')).toBe('<p>one <b>|</b></p>')
+      expect(view('<p>one <b>tw|o</b></p>', 'dat')).toBe('<p>one |</p>')
+      expect(view('<p>one <b>tw|o</b></p>', 'd2it')).toBe('<p>|</p>')
+    })
+  })
+
+  it('an unknown object key cancels the operator', () => {
+    const session = new Session('one t|wo').press('diz')
+
+    expect(session.text).toBe('one two')
+    expect(session.state.pending).toBe('')
+  })
+
+  describe('in visual mode', () => {
+    it('viw selects the word, and d deletes it', () => {
+      const session = new Session('one t|wo three').press('viw')
+
+      expect(session.selection).toEqual({ start: 4, end: 7 })
+      expect(session.press('d').text).toBe('one  three')
+    })
+
+    it('vawaw takes one more word', () => {
+      expect(new Session('o|ne two three').press('vawawd').text).toBe('three')
+    })
+
+    it('vi(i( takes the next pair out', () => {
+      const session = new Session('f(a, g(|bc))').press('vi(')
+
+      expect(session.selection).toEqual({ start: 7, end: 9 })
+      expect(session.press('i(').selection).toEqual({ start: 2, end: 10 })
+    })
+
+    it('vip turns the selection linewise', () => {
+      const session = new Session('one\n\ntw|o\ntwo\n\nthree').press('vip')
+
+      expect(session.mode).toBe('visual-line')
+      expect(session.press('d').text).toBe('one\n\n\nthree')
+    })
+
+    it('va" selects the quotes', () => {
+      expect(new Session('say "h|i" now').press('va"').selection).toEqual({ start: 4, end: 9 })
+    })
+  })
+})
+
+describe('W B E ge gE', () => {
+  it('move by WORDs, which end only at blanks', () => {
+    expect(view('|a.b c.d', 'W')).toBe('a.b |c.d')
+    expect(view('a.b c.|d', 'B')).toBe('a.b |c.d')
+    expect(view('|a.b c.d', 'E')).toBe('a.|b c.d')
+    expect(view('a.b c.|d', 'gE')).toBe('a.|b c.d')
+  })
+
+  it('ge goes to the end of the word before', () => {
+    expect(view('one two.th|ree', 'ge')).toBe('one two|.three')
+    expect(view('one tw|o', 'ge')).toBe('on|e two')
+    expect(view('one\n\n|two', 'ge')).toBe('one\n|\ntwo')
+  })
+
+  it('work with operators: dW cW dE dge', () => {
+    expect(view('|a.b c.d', 'dW')).toBe('|c.d')
+    expect(new Session('|a.b c.d').press('cWx<Esc>').text).toBe('x c.d')
+    expect(view('|a.b c.d', 'dE')).toBe('| c.d')
+    expect(view('one tw|o', 'dge')).toBe('o|n')
+  })
+})
+
+describe('r', () => {
+  it('replaces the character under the cursor, or count characters', () => {
+    expect(view('a|bc', 'rx')).toBe('a|xc')
+    expect(view('|abcd', '3rx')).toBe('xx|xd')
+    expect(new Session('|ab').press('r').state.pending).toBe('r')
+  })
+
+  it('cancels when the line has too few characters', () => {
+    expect(view('a|b', '3rx')).toBe('a|b')
+  })
+
+  it('takes any character, capitals behind Shift included', () => {
+expect(new Session('|ab').press('r<Shift>Q').text).toBe('Qb')
+  })
+
+  it('r and Enter breaks the line', () => {
+    expect(view('a| b', 'r<Enter>')).toBe('a\n|b')
+  })
+
+  it('replaces every character of a visual selection', () => {
+    const session = new Session('|abc\nde').press('vjrx')
+
+    expect(session.text).toBe('xxx\nxe')
+    expect(session.mode).toBe('normal')
+  })
+})
+
+describe('~ and case in visual mode', () => {
+  it('~ turns the case round and moves on', () => {
+    expect(view('|abC', '~')).toBe('A|bC')
+    expect(view('|abC', '3~')).toBe('AB|c')
+  })
+
+  it('u U ~ change the case of the selection', () => {
+    expect(new Session('|Hello World').press('veU').text).toBe('HELLO World')
+    expect(new Session('|Hello World').press('veu').text).toBe('hello World')
+    expect(new Session('|Hello World').press('Vu').text).toBe('hello world')
+    expect(new Session('|Hello').press('v$~').text).toBe('hELLO')
+  })
+})
+
+describe('%', () => {
+  it('jumps to the partner bracket, from the first bracket on the line', () => {
+    expect(view('|f(a, (b))', '%')).toBe('f(a, (b)|)')
+    expect(view('f(a, (b)|)', '%')).toBe('f|(a, (b))')
+    expect(view('{\n  |x\n}', 'k%')).toBe('{\n  x\n|}')
+  })
+
+  it('stays without a bracket, and d% deletes through the partner', () => {
+    expect(view('a|b', '%')).toBe('a|b')
+    expect(view('a|b', 'd%')).toBe('a|b')
+    expect(view('x |(a) y', 'd%')).toBe('x | y')
+  })
+})
+
+describe('> and <', () => {
+  it('>> and << indent and outdent lines, a count takes more lines', () => {
+    expect(new Session('- a|\n- b').press('>>').text).toBe('    - a\n- b')
+    expect(new Session('|a\nb\nc').press('2>>').text).toBe('    a\n    b\nc')
+    expect(new Session('      |a').press('<<').text).toBe('  a')
+    expect(new Session('\t|a').press('<<').text).toBe('a')
+  })
+
+  it('leave empty lines alone and take motions and text objects', () => {
+    expect(new Session('|a\n\nb').press('>G').text).toBe('    a\n\n    b')
+    expect(new Session('|a\nb\n\nc').press('>ip').text).toBe('    a\n    b\n\nc')
+  })
+
+  it('work on a visual selection', () => {
+    const session = new Session('|a\nb\nc').press('Vj>')
+
+    expect(session.text).toBe('    a\n    b\nc')
+    expect(session.mode).toBe('normal')
+  })
+})
+
+describe('search', () => {
+  it('/ shows the query as it is typed and Enter jumps to the match', () => {
+    const session = new Session('|one two one two')
+
+    session.press('/tw')
+    expect(session.state.pending).toBe('/tw')
+    expect(session.press('<Enter>').view).toBe('one |two one two')
+  })
+
+  it('n and N repeat it, wrapping around the end', () => {
+    const session = new Session('|one two one two').press('/two<Enter>')
+
+    expect(session.press('n').view).toBe('one two one |two')
+    expect(session.press('n').view).toBe('one |two one two')
+    expect(session.press('N').view).toBe('one two one |two')
+  })
+
+  it('? searches back', () => {
+    expect(view('a b a |b', '?a<Enter>')).toBe('a b |a b')
+  })
+
+  it('ignores case unless the query has a capital', () => {
+    expect(view('|x Word word', '/word<Enter>')).toBe('x |Word word')
+    expect(view('|x word Word', '/Word<Enter>')).toBe('x word |Word')
+  })
+
+  it('Backspace takes a character away, Escape cancels, a miss stays', () => {
+    const session = new Session('|abc')
+
+    expect(session.press('/bx<Backspace>').state.pending).toBe('/b')
+    expect(session.press('<Esc>').state.pending).toBe('')
+    expect(view('|abc', '/zz<Enter>')).toBe('|abc')
+    expect(view('|abc', '/<Backspace>j')).toBe('|abc')
+  })
+
+  it('search keys type into the query, not as commands', () => {
+    expect(view('|a dd 2x', '/2x<Enter>')).toBe('a dd |2x')
+  })
+
+  it('d/ deletes up to the match', () => {
+    expect(view('|one two three', 'd/thr<Enter>')).toBe('|three')
+  })
+
+  it('* and # search the whole word under the cursor', () => {
+    expect(view('|cat catalog cat', '*')).toBe('cat catalog |cat')
+    expect(view('cat catalog |cat', '#')).toBe('|cat catalog cat')
+    expect(view('|cat catalog cat', '*n')).toBe('|cat catalog cat')
+  })
+
+  it('a search extends a visual selection', () => {
+    expect(new Session('|ab cd').press('v/c<Enter>d').text).toBe('d')
+  })
+})
+
+describe('. repeat', () => {
+  it('repeats an operator with its motion', () => {
+    expect(new Session('|a b c d').press('dw.').text).toBe('c d')
+    expect(new Session('|a\nb\nc\nd').press('dd.').text).toBe('c\nd')
+  })
+
+  it('repeats a change with the text typed in it', () => {
+    const session = new Session('|one two three').press('cwONE<Esc>w.')
+
+    expect(session.text).toBe('ONE ONE three')
+  })
+
+  it('repeats insert commands with their text', () => {
+    expect(new Session('|a\nb').press('A!<Esc>j.').text).toBe('a!\nb!')
+    expect(new Session('|a').press('onew<Esc>.').text).toBe('a\nnew\nnew')
+  })
+
+  it('repeats x, r, ~, >> and text objects', () => {
+    expect(new Session('|abcd').press('x.').text).toBe('cd')
+    expect(new Session('|abcd').press('rxl.').text).toBe('xxcd')
+    expect(new Session('|abcd').press('~.').text).toBe('ABcd')
+    expect(new Session('|a').press('>>.').text).toBe('        a')
+    expect(new Session('say "a" and "b|"').press('di"0.').text).toBe('say "" and ""')
+  })
+
+  it('a count replaces the count of the change', () => {
+    expect(new Session('|a b c d e').press('dw3.').text).toBe('e')
+  })
+
+  it('motions, yanks and undo leave the last change alone', () => {
+    expect(new Session('|a b c d').press('dwwyw.').text).toBe('b d')
+  })
+
+  it('does nothing before the first change', () => {
+    expect(new Session('|ab').press('.').text).toBe('ab')
+  })
+
+  it('hands the editor one edit, so one undo takes it back', () => {
+    const session = new Session('|one two').press('cwX<Esc>w')
+    const result = handleKey(session.state, { key: '.', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false }, session.text, session.selection, wrappedRows(session.text, 1000))
+
+    expect(VimResult.$is('Edit')(result)).toBe(true)
   })
 })

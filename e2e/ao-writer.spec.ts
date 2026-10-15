@@ -430,6 +430,79 @@ test('vim keys: f finds a character, ; repeats it and dt. deletes up to a period
   expect(await caretOf(page)).toBe(3)
 })
 
+test('vim keys: ciw changes a word, di" empties quotes and da( removes brackets', async ({ page }) => {
+  await startWriting(page, 'say "hello there" to f(a, b) now')
+  await enableVim(page)
+
+  const editor = page.getByTestId('editor')
+  const mode = page.getByTestId('vim-mode')
+
+  await page.keyboard.press('g')
+  await page.keyboard.press('g')
+  await page.keyboard.press('c')
+  await page.keyboard.press('i')
+  await expect(mode).toHaveText('NORMAL ci')
+  await page.keyboard.press('w')
+  await expect(mode).toHaveText('INSERT')
+  await page.keyboard.type('tell')
+  await page.keyboard.press('Escape')
+  await expect(editor).toHaveValue('tell "hello there" to f(a, b) now')
+
+  // the cursor sits in front of the quotes: the next pair on the line counts
+  await page.keyboard.press('d')
+  await page.keyboard.press('i')
+  await page.keyboard.press('Shift+Quote')
+  await expect(editor).toHaveValue('tell "" to f(a, b) now')
+
+  await page.keyboard.press('f')
+  await page.keyboard.press('b')
+  await page.keyboard.press('d')
+  await page.keyboard.press('a')
+  await page.keyboard.press('(')
+  await expect(editor).toHaveValue('tell "" to f now')
+})
+
+test('vim keys: / searches with the query in the status bar, . repeats a change, r and >> edit', async ({ page }) => {
+  await startWriting(page, 'one two one two\nlast line')
+  await enableVim(page)
+
+  const editor = page.getByTestId('editor')
+  const mode = page.getByTestId('vim-mode')
+
+  await page.keyboard.press('g')
+  await page.keyboard.press('g')
+  await page.keyboard.press('/')
+  await page.keyboard.type('two')
+  await expect(mode).toHaveText('NORMAL /two')
+  await page.keyboard.press('Enter')
+  await expect(mode).toHaveText('NORMAL')
+  await expect(editor).toHaveValue('one two one two\nlast line')
+  expect(await caretOf(page)).toBe(4)
+
+  await page.keyboard.press('n')
+  expect(await caretOf(page)).toBe(12)
+
+  // cw TWO, then n and . do the same to the first match
+  await page.keyboard.press('c')
+  await page.keyboard.press('w')
+  await page.keyboard.type('TWO')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('n')
+  await page.keyboard.press('.')
+  await expect(editor).toHaveValue('one TWO one TWO\nlast line')
+
+  // one undo takes the whole repeat back
+  await page.keyboard.press('u')
+  await expect(editor).toHaveValue('one two one TWO\nlast line')
+
+  await page.keyboard.press('0')
+  await page.keyboard.press('r')
+  await page.keyboard.press('Shift+O')
+  await page.keyboard.press('>')
+  await page.keyboard.press('>')
+  await expect(editor).toHaveValue('    One two one TWO\nlast line')
+})
+
 test('vim keys: Ctrl+R is redo in normal mode, Escape still closes menus, and the setting turns off', async ({ page }) => {
   await startWriting(page, 'one two')
   await enableVim(page)
