@@ -48,6 +48,11 @@ describe('matchesChord', () => {
     expect(findAction(press('KeyI', 'ˆ', { ctrlKey: true, altKey: true }), false)).toBe('illustrate')
   })
 
+  it('opens the idea coach with Cmd+Alt+P', () => {
+    expect(findAction(press('KeyP', 'π', { metaKey: true, altKey: true }), true)).toBe('plan')
+    expect(findAction(press('KeyP', 'p', { ctrlKey: true, altKey: true }), false)).toBe('plan')
+  })
+
   it('maps blockquote to Cmd+Shift+period', () => {
     expect(findAction(press('Period', '>', { metaKey: true, shiftKey: true }), true)).toBe('quote')
   })

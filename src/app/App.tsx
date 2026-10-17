@@ -9,6 +9,7 @@ import { settingsAtom } from '../features/settings/atoms.ts'
 import { CoachDot, useCoach } from './Coach.tsx'
 import { Editor } from './Editor.tsx'
 import { IllustrateDot } from './Illustrate.tsx'
+import { PlanPanel } from './PlanPanel.tsx'
 import { Preview } from './Preview.tsx'
 import { Sidebar } from './Sidebar.tsx'
 import { StatusBar } from './StatusBar.tsx'
@@ -111,6 +112,7 @@ export function App() {
             ) : null}
           </div>
         ) : null}
+        <PlanPanel isMac={isMac} />
         <StatusBar isMac={isMac} run={run} />
       </main>
     </div>

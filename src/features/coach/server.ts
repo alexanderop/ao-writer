@@ -19,7 +19,7 @@ export const askCoach = createServerFn({ method: 'POST' })
     const { coachConnection } = await import('./acp.ts')
     const { readProfile, readVocabulary } = await import('./journal.ts')
     const context = { profile: await readProfile(), words: wordsForCoach(await readVocabulary()), wordTurn: data.wordTurn }
-    const reply = await coachConnection(COACH_INSTRUCTIONS).prompt(data.documentId, coachPrompt(data.text, data.caret, context))
+    const reply = await coachConnection().prompt(data.documentId, COACH_INSTRUCTIONS, coachPrompt(data.text, data.caret, context))
 
     return { note: parseReply(reply) }
   })
@@ -32,11 +32,11 @@ export const reflectCoach = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const { coachConnection } = await import('./acp.ts')
     const { readProfile, writeProfile } = await import('./journal.ts')
-    const connection = coachConnection(COACH_INSTRUCTIONS)
+    const connection = coachConnection()
 
     if (!connection.knows(data.documentId)) return { profile: null }
 
-    const profile = parseProfile(await connection.prompt(data.documentId, reflectPrompt(await readProfile())))
+    const profile = parseProfile(await connection.prompt(data.documentId, COACH_INSTRUCTIONS, reflectPrompt(await readProfile())))
 
     if (profile !== null) await writeProfile(profile)
 

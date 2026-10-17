@@ -8,8 +8,9 @@ import { Option, Schema } from 'effect'
 
 /**
 A minimal Agent Client Protocol client: JSON-RPC over the stdio of Claude Code's ACP adapter.
-It runs on the dev server only. One adapter process serves every document; each document gets its own session, so the
-coach remembers what it already told the writer about that text.
+It runs on the dev server only. One adapter process serves every document and every coach; each key (a document for the
+writing coach, one idea for the planner) gets its own session with its own instructions, so the agent remembers what it
+already said there.
 */
 
 /** The model the coach runs on: quick enough to answer in a few seconds, good enough to teach. */
@@ -57,7 +58,7 @@ class AcpConnection {
   private nextId = 0
   closed = false
 
-  constructor(private readonly instructions: string) {
+  constructor() {
     const adapter = createRequire(import.meta.url).resolve('@agentclientprotocol/claude-agent-acp/dist/index.js')
 
     this.child = spawn(process.execPath, [adapter], { stdio: ['pipe', 'pipe', 'pipe'] })
@@ -71,12 +72,12 @@ class AcpConnection {
     this.ready = this.request('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false } })
   }
 
-  /** Sends one prompt to the document's session, after any prompt still running there, and resolves with the agent's whole text reply. */
-  prompt(documentId: string, text: string): Promise<string> {
-    const reply = (this.turns.get(documentId) ?? Promise.resolve()).then(() => this.turn(documentId, text))
+  /** Sends one prompt to the key's session, after any prompt still running there, and resolves with the agent's whole text reply. The instructions count only when the session starts. */
+  prompt(key: string, instructions: string, text: string): Promise<string> {
+    const reply = (this.turns.get(key) ?? Promise.resolve()).then(() => this.turn(key, instructions, text))
 
     this.turns.set(
-      documentId,
+      key,
       reply.then(
         () => undefined,
         () => undefined,
@@ -86,8 +87,8 @@ class AcpConnection {
     return reply
   }
 
-  private async turn(documentId: string, text: string): Promise<string> {
-    const sessionId = await this.session(documentId)
+  private async turn(key: string, instructions: string, text: string): Promise<string> {
+    const sessionId = await this.session(key, instructions)
 
     this.replies.set(sessionId, '')
     await this.request('session/prompt', { sessionId, prompt: [{ type: 'text', text }] })
@@ -99,13 +100,13 @@ class AcpConnection {
     return reply
   }
 
-  /** Whether the coach has seen this document since the server started. */
-  knows(documentId: string): boolean {
-    return this.sessions.has(documentId)
+  /** Whether there is a session for this key since the server started. */
+  knows(key: string): boolean {
+    return this.sessions.has(key)
   }
 
-  private session(documentId: string): Promise<string> {
-    const existing = this.sessions.get(documentId)
+  private session(key: string, instructions: string): Promise<string> {
+    const existing = this.sessions.get(key)
 
     if (existing) return existing
 
@@ -116,7 +117,7 @@ class AcpConnection {
           mcpServers: [],
           // a teacher, not a coding agent: its own instructions, no tools, and none of the user's settings, skills or MCP servers
           _meta: {
-            systemPrompt: this.instructions,
+            systemPrompt: instructions,
             disableBuiltInTools: true,
             claudeCode: { options: { settingSources: [], strictMcpConfig: true, persistSession: false } },
           },
@@ -129,8 +130,8 @@ class AcpConnection {
     })
 
     // a failed start is not cached, so the next ask tries again
-    created.catch(() => this.sessions.delete(documentId))
-    this.sessions.set(documentId, created)
+    created.catch(() => this.sessions.delete(key))
+    this.sessions.set(key, created)
 
     return created
   }
@@ -171,7 +172,7 @@ class AcpConnection {
     }
 
     // the coach has no tools, so a request from the agent (a permission prompt, a file read) is refused
-    if (message.id !== undefined) this.child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Not supported by the writing coach.' } })}\n`)
+    if (message.id !== undefined) this.child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Not supported by AO Writer.' } })}\n`)
   }
 
   private close(error: Error): void {
@@ -189,18 +190,18 @@ class AcpConnection {
 
 declare global {
   // the connection lives on globalThis, so a dev-server reload of this module reuses it instead of leaking a process
-  var aoWriterCoach: AcpConnection | undefined
+  var aoWriterAcp: AcpConnection | undefined
 }
 
 /** The running connection, or a new one when there is none or the last one died. */
-export function coachConnection(instructions: string): AcpConnection {
-  const running = globalThis.aoWriterCoach
+export function coachConnection(): AcpConnection {
+  const running = globalThis.aoWriterAcp
 
   if (running !== undefined && !running.closed) return running
 
-  const connection = new AcpConnection(instructions)
+  const connection = new AcpConnection()
 
-  globalThis.aoWriterCoach = connection
+  globalThis.aoWriterAcp = connection
   process.once('exit', () => connection.stop())
 
   return connection

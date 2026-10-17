@@ -1,5 +1,5 @@
 import { useAtom, useAtomValue } from '@effect/atom-react'
-import { Eye, Focus, Moon, Palette, SpellCheck } from 'lucide-react'
+import { Eye, Focus, Lightbulb, Moon, Palette, SpellCheck } from 'lucide-react'
 
 import { formatDuration } from '../core/text/counts.ts'
 import type { TextCounts } from '../core/text/counts.ts'
@@ -8,6 +8,7 @@ import type { ActionId } from '../core/shortcuts.ts'
 import { countsAtom, selectionCountsAtom, vimAtom } from '../features/editor/atoms.ts'
 import { modeLabel } from '../core/vim/state.ts'
 import { saveStatusAtom } from '../features/library/atoms.ts'
+import { planOpenAtom } from '../features/plan/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { nextCounter } from '../features/settings/settings.ts'
 import type { Settings } from '../features/settings/settings.ts'
@@ -47,6 +48,7 @@ export function StatusBar({ isMac, run }: StatusBarProps) {
   const selected = useAtomValue(selectionCountsAtom)
   const saveStatus = useAtomValue(saveStatusAtom)
   const vim = useAtomValue(vimAtom)
+  const planOpen = useAtomValue(planOpenAtom)
   const shown = selected ?? counts
   // the keys Vim is still waiting on, such as 2d3
   const typedKeys = `${vim.operatorCount > 0 ? vim.operatorCount : ''}${vim.pending}${vim.count > 0 ? vim.count : ''}`
@@ -77,6 +79,9 @@ export function StatusBar({ isMac, run }: StatusBarProps) {
         ) : null}
       </div>
       <div className="flex items-center gap-0.5">
+        <ToolButton keepFocus label="Plan a post" shortcut={shortcutLabel('plan', isMac)} pressed={planOpen} testId="toggle-plan" onClick={() => run('plan')}>
+          <Lightbulb />
+        </ToolButton>
         <ToolButton keepFocus label="Focus mode" shortcut={shortcutLabel('focus', isMac)} pressed={settings.focus} testId="toggle-focus" onClick={() => run('focus')}>
           <Focus />
         </ToolButton>
