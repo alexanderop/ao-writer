@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react'
 import { isFormatAction } from '../core/shortcuts.ts'
 import type { ActionId } from '../core/shortcuts.ts'
 import { askCoachAtom } from '../features/coach/atoms.ts'
+import { fixAtom } from '../features/fix/atoms.ts'
 import { illustrateAtom } from '../features/illustrate/atoms.ts'
 import { createDocumentAtom } from '../features/library/atoms.ts'
 import { planOpenAtom } from '../features/plan/atoms.ts'
@@ -51,6 +52,7 @@ export function useActions(): (id: ActionId) => void {
   const askCoach = useAtomSet(askCoachAtom)
   const illustrate = useAtomSet(illustrateAtom)
   const setPlanOpen = useAtomSet(planOpenAtom)
+  const fix = useAtomSet(fixAtom)
   const input = useAtomValue(editorInputAtom)
 
   return useCallback(
@@ -79,6 +81,12 @@ export function useActions(): (id: ActionId) => void {
         return
       }
 
+      if (id === 'fix') {
+        fix()
+
+        return
+      }
+
       if (id === 'plan') {
         setPlanOpen((open) => !open)
 
@@ -87,6 +95,6 @@ export function useActions(): (id: ActionId) => void {
 
       setSettings((settings) => toggleView(settings, id))
     },
-    [askCoach, createDocument, illustrate, input, setPlanOpen, setSettings],
+    [askCoach, createDocument, fix, illustrate, input, setPlanOpen, setSettings],
   )
 }

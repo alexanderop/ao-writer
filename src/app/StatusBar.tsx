@@ -1,5 +1,6 @@
 import { useAtom, useAtomValue } from '@effect/atom-react'
-import { Eye, Focus, Lightbulb, Moon, Palette, SpellCheck } from 'lucide-react'
+import { useEffect } from 'react'
+import { Eye, Focus, Lightbulb, Moon, Palette, SpellCheck, WandSparkles } from 'lucide-react'
 
 import { formatDuration } from '../core/text/counts.ts'
 import type { TextCounts } from '../core/text/counts.ts'
@@ -7,6 +8,7 @@ import { shortcutLabel } from '../core/shortcuts.ts'
 import type { ActionId } from '../core/shortcuts.ts'
 import { countsAtom, selectionCountsAtom, vimAtom } from '../features/editor/atoms.ts'
 import { modeLabel } from '../core/vim/state.ts'
+import { fixStatusAtom } from '../features/fix/atoms.ts'
 import { saveStatusAtom } from '../features/library/atoms.ts'
 import { planOpenAtom } from '../features/plan/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
@@ -49,9 +51,19 @@ export function StatusBar({ isMac, run }: StatusBarProps) {
   const saveStatus = useAtomValue(saveStatusAtom)
   const vim = useAtomValue(vimAtom)
   const planOpen = useAtomValue(planOpenAtom)
+  const [fixStatus, setFixStatus] = useAtom(fixStatusAtom)
   const shown = selected ?? counts
   // the keys Vim is still waiting on, such as 2d3
   const typedKeys = `${vim.operatorCount > 0 ? vim.operatorCount : ''}${vim.pending}${vim.count > 0 ? vim.count : ''}`
+
+  // the result of a fix stays a few seconds, then the bar is quiet again
+  useEffect(() => {
+    if (fixStatus.kind !== 'done') return
+
+    const timer = setTimeout(() => setFixStatus({ kind: 'idle' }), 6000)
+
+    return () => clearTimeout(timer)
+  }, [fixStatus, setFixStatus])
 
   return (
     <footer className="chrome absolute inset-x-0 bottom-0 z-20 flex h-11 items-center justify-between gap-3 bg-gradient-to-t from-paper from-60% to-transparent px-4">
@@ -71,6 +83,11 @@ export function StatusBar({ isMac, run }: StatusBarProps) {
         <span className="text-ink-faint" data-testid="save-status" data-state={saveStatus}>
           {SAVE_LABEL[saveStatus]}
         </span>
+        {fixStatus.kind === 'idle' ? null : (
+          <span className="text-ink-faint" role="status" data-testid="fix-status">
+            {fixStatus.kind === 'fixing' ? 'Fixing spelling and grammar…' : fixStatus.message}
+          </span>
+        )}
         {settings.vim ? (
           <span className="font-bold tracking-wider text-ink-faint" data-testid="vim-mode" data-mode={vim.mode}>
             {modeLabel(vim.mode)}
@@ -79,6 +96,9 @@ export function StatusBar({ isMac, run }: StatusBarProps) {
         ) : null}
       </div>
       <div className="flex items-center gap-0.5">
+        <ToolButton keepFocus label="Fix spelling and grammar" shortcut={shortcutLabel('fix', isMac)} pressed={fixStatus.kind === 'fixing'} testId="fix" onClick={() => run('fix')}>
+          <WandSparkles />
+        </ToolButton>
         <ToolButton keepFocus label="Plan a post" shortcut={shortcutLabel('plan', isMac)} pressed={planOpen} testId="toggle-plan" onClick={() => run('plan')}>
           <Lightbulb />
         </ToolButton>

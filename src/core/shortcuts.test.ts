@@ -53,6 +53,10 @@ describe('matchesChord', () => {
     expect(findAction(press('KeyP', 'p', { ctrlKey: true, altKey: true }), false)).toBe('plan')
   })
 
+  it('fixes spelling and grammar with Cmd+Alt+F', () => {
+    expect(findAction(press('KeyF', 'ƒ', { metaKey: true, altKey: true }), true)).toBe('fix')
+  })
+
   it('maps blockquote to Cmd+Shift+period', () => {
     expect(findAction(press('Period', '>', { metaKey: true, shiftKey: true }), true)).toBe('quote')
   })

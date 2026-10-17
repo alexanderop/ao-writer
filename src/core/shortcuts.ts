@@ -17,6 +17,7 @@ export type ActionId =
   | 'coach'
   | 'illustrate'
   | 'plan'
+  | 'fix'
 
 /** One key combination. `mod` is Cmd on a Mac and Ctrl elsewhere. */
 export interface Chord {
@@ -118,6 +119,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'coach', label: 'Ask the coach', mac: ['Mod+Shift+K'], other: ['Mod+Shift+K'] },
   { id: 'illustrate', label: 'Illustrate', mac: ['Mod+Shift+I'], other: ['Mod+Alt+I'] },
   { id: 'plan', label: 'Plan a post', mac: ['Mod+Alt+P'], other: ['Mod+Alt+P'] },
+  { id: 'fix', label: 'Fix spelling and grammar', mac: ['Mod+Alt+F'], other: ['Mod+Alt+F'] },
   { id: 'bold', label: 'Bold', mac: ['Mod+B'], other: ['Mod+B'] },
   { id: 'italic', label: 'Italic', mac: ['Mod+I'], other: ['Mod+I'] },
   { id: 'strike', label: 'Strikethrough', mac: ['Mod+Alt+U'], other: ['Mod+Alt+U'] },
