@@ -359,6 +359,181 @@ body {
   border-left-color: var(--pos-noun);
 }
 
+/* Pictures: the skeleton of one Codex is drawing, and the card that shows a picture beside its line in the editor */
+.picture-skeleton {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: linear-gradient(115deg, var(--panel) 35%, var(--rule) 50%, var(--panel) 65%) 100% 0 / 300% 100%;
+  animation: picture-sweep 3.2s ease-in-out infinite;
+}
+
+.picture-skeleton svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--ink-faint);
+  animation: picture-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes picture-sweep {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: 0 0;
+  }
+}
+
+@keyframes picture-breathe {
+  50% {
+    opacity: 0.4;
+    transform: scale(0.92);
+  }
+}
+
+.picture-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.picture-prompt {
+  display: -webkit-box;
+  overflow: hidden;
+  font-style: italic;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.picture-elapsed {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+.picture-card {
+  position: absolute;
+  z-index: 10;
+}
+
+.picture-card-margin {
+  left: calc(100% + 2.5rem);
+  width: 14rem;
+}
+
+/* under its line it covers the text below, so it is a lifted card of its own */
+.picture-card-below {
+  left: 0;
+  width: min(100%, 19rem);
+  padding: 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.75rem;
+  background: var(--paper);
+  box-shadow: 0 8px 28px -12px rgb(0 0 0 / 0.3);
+}
+
+.picture-frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 0.5rem;
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.picture-frame:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.picture-frame .picture-skeleton {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+  border-radius: 0;
+  transition:
+    opacity 0.9s ease,
+    visibility 0s 0.9s;
+}
+
+.picture-frame img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+
+.picture-frame[data-loaded='true'] img {
+  opacity: 1;
+}
+
+.picture-frame[data-loaded='true'] .picture-skeleton {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.picture-note {
+  padding: 0.5rem 0.7rem;
+  border-left: 2px solid var(--rule);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+/* a picture Codex is still drawing in the preview: the skeleton stands where the picture will be */
+.picture-pending {
+  margin-block: 1.5em;
+}
+
+.preview img.picture-in {
+  animation: picture-in 0.9s ease both;
+}
+
+@keyframes picture-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .picture-skeleton {
+    background: var(--panel);
+    animation: none;
+  }
+
+  .picture-skeleton svg {
+    animation: none;
+  }
+
+  .picture-frame img,
+  .picture-frame .picture-skeleton {
+    transition: none;
+  }
+
+  .preview img.picture-in {
+    animation: none;
+  }
+}
+
 /* The writer profile in the sidebar: the coach's Markdown, small */
 .journal-profile {
   font-size: 0.75rem;
@@ -752,25 +927,9 @@ body {
   border-radius: 4px;
 }
 
-/* a picture Codex is still drawing: its file is not stored yet */
+/* a picture Codex is still drawing: its file is not stored yet; the skeleton next to it stands in */
 .preview img[data-pending] {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: var(--panel);
-  animation: picture-pulse 1.8s ease-in-out infinite;
-}
-
-@keyframes picture-pulse {
-  50% {
-    opacity: 0.55;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .preview img[data-pending] {
-    animation: none;
-  }
+  display: none;
 }
 
 .preview table {

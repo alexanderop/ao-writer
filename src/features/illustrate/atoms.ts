@@ -2,6 +2,7 @@ import { Effect, Option } from 'effect'
 import * as Atom from 'effect/reactivity/Atom'
 import { AtomRegistry } from 'effect/reactivity/AtomRegistry'
 
+import type { IllustrationJob } from '../../core/illustrate/cards.ts'
 import { altEdit, placementEdit, withdrawEdit } from '../../core/illustrate/place.ts'
 import { findIllustrateTarget } from '../../core/illustrate/prompt.ts'
 import type { IllustrateTarget } from '../../core/illustrate/prompt.ts'
@@ -31,6 +32,30 @@ export const illustratePromptAtom = Atom.make<IllustratePrompt>({ kind: 'closed'
 
 /** The illustration status the dot under the top bar shows. */
 export const illustrateStatusAtom = Atom.make<IllustrateStatus>({ kind: 'idle' }).pipe(Atom.keepAlive)
+
+/** The pictures of this session by id: what each was asked for and how it ended. The cards in the editor and the preview read it. */
+export const illustrationJobsAtom = Atom.make<Readonly<Record<string, IllustrationJob>>>({}).pipe(Atom.keepAlive)
+
+/** How a picture ended: why it did not work out (null when it did) and where its withdrawn placeholder stood. */
+interface Outcome {
+  readonly reason: string | null
+  readonly at: number | null
+}
+
+function settle(registry: AtomRegistry, id: string, outcome: Outcome): void {
+  registry.update(illustrationJobsAtom, (jobs) => {
+    const job = jobs[id]
+
+    if (job === undefined) return jobs
+
+    const { prompt, startedAt } = job
+    const finishedAt = Date.now()
+
+    const settled: IllustrationJob = outcome.reason === null ? { state: 'done', id, prompt, startedAt, finishedAt } : { state: 'failed', id, prompt, startedAt, finishedAt, reason: outcome.reason, at: outcome.at }
+
+    return { ...jobs, [id]: settled }
+  })
+}
 
 function started(registry: AtomRegistry): void {
   const status = registry.get(illustrateStatusAtom)
@@ -70,12 +95,12 @@ const stored = Effect.fnUntraced(function* (registry: AtomRegistry, description:
   return { ok: true, alt: alt ?? description } as const
 })
 
-/** Has Codex draw the picture for the placeholder `id` and settles the placeholder; resolves with why that did not work, or null. */
+/** Has Codex draw the picture for the placeholder `id` and settles the placeholder and the job. */
 const drawn = Effect.fnUntraced(function* (registry: AtomRegistry, description: string, id: string, documentId: string) {
   const result: Stored = yield* stored(registry, description, id)
 
   // a document the writer has left is not touched; the picture is stored, so it shows if they come back
-  if (registry.get(activeIdAtom) !== documentId) return result.ok ? null : result.reason
+  if (registry.get(activeIdAtom) !== documentId) return { reason: result.ok ? null : result.reason, at: null }
 
   const input = registry.get(editorInputAtom)
 
@@ -84,9 +109,9 @@ const drawn = Effect.fnUntraced(function* (registry: AtomRegistry, description: 
 
   if (input !== null && edit !== null) applyEdit(input, edit)
 
-  if (!result.ok) return result.reason
+  if (!result.ok) return { reason: result.reason, at: edit?.from ?? null }
 
-  return edit === null ? NO_PLACE : null
+  return { reason: edit === null ? NO_PLACE : null, at: null }
 })
 
 /** Puts the placeholder in the text right away, then has Codex draw the picture for it. */
@@ -98,8 +123,15 @@ const illustrating = Effect.fnUntraced(function* (registry: AtomRegistry, target
   const id = crypto.randomUUID().slice(0, 8)
 
   applyEdit(input, placementEdit(input.value, target, id, input.selectionStart, input.selectionEnd))
+  const drawing: IllustrationJob = { state: 'drawing', id, prompt: target.description, startedAt: Date.now() }
+
+  registry.update(illustrationJobsAtom, (jobs) => ({ ...jobs, [id]: drawing }))
   started(registry)
-  finished(registry, yield* drawn(registry, target.description, id, documentId))
+
+  const outcome = yield* drawn(registry, target.description, id, documentId)
+
+  settle(registry, id, outcome)
+  finished(registry, outcome.reason)
 })
 
 /** Illustrates the empty image under the caret or the selected text; with neither, opens the prompt box at the caret. */

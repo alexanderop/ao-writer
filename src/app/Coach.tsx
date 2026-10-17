@@ -14,6 +14,8 @@ import { textAtom } from '../features/editor/atoms.ts'
 import { activeIdAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { applyEdit, editorInputAtom } from './editor-input.ts'
+import { hasMarginRoom, rangeBoxes, useMeasureOnResize } from './range-boxes.ts'
+import type { Box } from './range-boxes.ts'
 
 /** An unread note leaves the margin after this long, like a remark the writer let pass. */
 const FADE_AFTER_MS = 90_000
@@ -21,52 +23,12 @@ const FADE_AFTER_MS = 90_000
 /** How long the "handled" acknowledgement stays before the note goes. */
 const HANDLED_MS = 2_500
 
-/** The margin needs this much room right of the text for the note; with less, the note sits under its passage. */
-const MARGIN_WIDTH = 320
-
 /** The header of each kind of note. */
 const KIND = {
   nudge: { icon: PencilLine, label: 'Coach' },
   praise: { icon: Check, label: 'Coach' },
   word: { icon: BookOpen, label: 'Word' },
 } as const
-
-interface Box {
-  readonly top: number
-  readonly left: number
-  readonly width: number
-  readonly height: number
-}
-
-/** The line boxes of a character range in the highlight layer, relative to the layer. */
-export function rangeBoxes(layer: HTMLElement, start: number, end: number): Box[] {
-  const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT)
-  const range = document.createRange()
-  let offset = 0
-  let started = false
-
-  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-    const length = node.textContent?.length ?? 0
-
-    if (!started && start < offset + length) {
-      range.setStart(node, start - offset)
-      started = true
-    }
-
-    if (started && end <= offset + length) {
-      range.setEnd(node, end - offset)
-      break
-    }
-
-    offset += length
-  }
-
-  if (!started) return []
-
-  const origin = layer.getBoundingClientRect()
-
-  return [...range.getClientRects()].map((rect) => ({ top: rect.top - origin.top, left: rect.left - origin.left, width: rect.width, height: rect.height }))
-}
 
 /** Asks the coach after each pause in writing, while the coach is set to do that; updates the writer profile when the writer leaves a document. */
 export function useCoach(): void {
@@ -161,16 +123,12 @@ export function CoachMarks({ layerRef }: { layerRef: RefObject<HTMLDivElement | 
     }
 
     setBoxes(rangeBoxes(layer, range.start, range.end))
-    setInMargin(window.innerWidth - layer.getBoundingClientRect().right >= MARGIN_WIDTH)
+    setInMargin(hasMarginRoom(layer))
   }, [layerRef, range?.start, range?.end])
 
   useLayoutEffect(measure, [measure, text, fontSize])
 
-  useEffect(() => {
-    window.addEventListener('resize', measure)
-
-    return () => window.removeEventListener('resize', measure)
-  }, [measure])
+  useMeasureOnResize(layerRef, measure)
 
   // a new note starts folded
   useEffect(() => {

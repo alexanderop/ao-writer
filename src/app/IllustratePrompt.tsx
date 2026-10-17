@@ -7,7 +7,7 @@ import { textAtom } from '../features/editor/atoms.ts'
 import { activeIdAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { editorInputAtom } from './editor-input.ts'
-import { rangeBoxes } from './Coach.tsx'
+import { lineBoxAt } from './range-boxes.ts'
 
 /** A one-line box under the caret's line where the writer describes a picture; Enter has Codex draw it there. Lives inside the editor stack. */
 export function IllustratePrompt({ layerRef }: { layerRef: RefObject<HTMLDivElement | null> }) {
@@ -30,7 +30,7 @@ export function IllustratePrompt({ layerRef }: { layerRef: RefObject<HTMLDivElem
       return
     }
 
-    const box = rangeBoxes(layer, at, at + 1)[0] ?? rangeBoxes(layer, Math.max(at - 1, 0), at)[0]
+    const box = lineBoxAt(layer, at)
 
     setTop(box === undefined ? null : box.top + box.height + 6)
   }, [layerRef, at, text, fontSize])
