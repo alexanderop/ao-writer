@@ -35,6 +35,8 @@ export const Settings = Schema.Struct({
   redundancies: Schema.Boolean,
   preview: Schema.Boolean,
   previewLayout: Schema.Literals(['split', 'full']),
+  // the writing coach: off, only when asked, or also on its own after a pause in writing
+  coach: Schema.Literals(['off', 'ask', 'pause']).pipe(Schema.withDecodingDefaultKey(Effect.succeed('pause' as const))),
 })
 
 export type Settings = typeof Settings.Type
@@ -67,6 +69,7 @@ export function defaultSettings(prefersDark: boolean): Settings {
     redundancies: true,
     preview: false,
     previewLayout: 'split',
+    coach: 'pause',
   }
 }
 

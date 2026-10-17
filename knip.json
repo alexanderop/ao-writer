@@ -2,5 +2,5 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["e2e/*.spec.ts"],
   "project": ["src/**/*.{ts,tsx}", "e2e/**/*.ts"],
-  "ignoreDependencies": ["tailwindcss", "tw-animate-css"]
+  "ignoreDependencies": ["tailwindcss", "tw-animate-css", "@agentclientprotocol/claude-agent-acp"]
 }

@@ -17,6 +17,13 @@ describe('settings', () => {
     expect(Schema.decodeUnknownSync(Settings)({ ...saved, vim: true }).vim).toBe(true)
   })
 
+  it('coaches after a pause by default, also for settings saved before the coach existed', () => {
+    const { coach, ...saved } = defaultSettings(false)
+
+    expect(coach).toBe('pause')
+    expect(Schema.decodeUnknownSync(Settings)(saved).coach).toBe('pause')
+  })
+
   it('steps the text size within bounds', () => {
     expect(resizedFont(18, 'bigger')).toBe(20)
     expect(resizedFont(18, 'smaller')).toBe(16)

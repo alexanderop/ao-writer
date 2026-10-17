@@ -6,6 +6,7 @@ import { typingAtom, vimAtom } from '../features/editor/atoms.ts'
 import { highlightAtom } from '../features/highlight/atoms.ts'
 import { bootAtom, flushAtom, loadedAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
+import { CoachDot, useCoach } from './Coach.tsx'
 import { Editor } from './Editor.tsx'
 import { Preview } from './Preview.tsx'
 import { Sidebar } from './Sidebar.tsx'
@@ -79,6 +80,7 @@ export function App() {
   useShortcuts(isMac, run, settings.vim && vim.mode !== 'insert')
   useChromeReturn()
   useFlushOnLeave()
+  useCoach()
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', settings.theme === 'dark')
@@ -92,6 +94,7 @@ export function App() {
       <Sidebar open={settings.sidebar} isMac={isMac} />
       <main className="relative flex min-w-0 flex-1">
         <TopBar isMac={isMac} run={run} />
+        <CoachDot isMac={isMac} />
         {loaded ? (
           <div className="flex h-full min-w-0 flex-1">
             {full ? null : (

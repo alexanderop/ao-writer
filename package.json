@@ -19,6 +19,7 @@
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm knip"
   },
   "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.90.0",
     "@effect/atom-react": "4.0.2",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-router": "1.170.41",

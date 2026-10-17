@@ -12,6 +12,7 @@ import { caretAtom, segmentsAtom, selectionAtom, textAtom, typingAtom, vimAtom }
 import { activeIdAtom, autosaveAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { typewriterActive } from '../features/settings/settings.ts'
+import { CoachMarks } from './Coach.tsx'
 import { applyEdit, editorInputAtom } from './editor-input.ts'
 import { useCaretScroll } from './useCaretScroll.ts'
 import { runVimKey } from './vim-input.ts'
@@ -319,6 +320,7 @@ export function Editor() {
             onChange={onChange}
             onKeyDown={onKeyDown}
           />
+          <CoachMarks layerRef={highlightRef} />
         </div>
       </div>
     </div>

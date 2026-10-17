@@ -14,6 +14,7 @@ export type ActionId =
   | 'normalText'
   | 'library'
   | 'newDocument'
+  | 'coach'
 
 /** One key combination. `mod` is Cmd on a Mac and Ctrl elsewhere. */
 export interface Chord {
@@ -112,6 +113,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'normalText', label: 'Normal text size', mac: ['Mod+0'], other: ['Mod+0'] },
   { id: 'library', label: 'Library', mac: ['Mod+Ctrl+S'], other: ['Ctrl+Alt+S'] },
   { id: 'newDocument', label: 'New document', mac: ['Alt+Shift+N'], other: ['Alt+Shift+N'] },
+  { id: 'coach', label: 'Ask the coach', mac: ['Mod+Shift+K'], other: ['Mod+Shift+K'] },
   { id: 'bold', label: 'Bold', mac: ['Mod+B'], other: ['Mod+B'] },
   { id: 'italic', label: 'Italic', mac: ['Mod+I'], other: ['Mod+I'] },
   { id: 'strike', label: 'Strikethrough', mac: ['Mod+Alt+U'], other: ['Mod+Alt+U'] },

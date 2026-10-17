@@ -3,6 +3,7 @@ import { useCallback, useMemo } from 'react'
 
 import { isFormatAction } from '../core/shortcuts.ts'
 import type { ActionId } from '../core/shortcuts.ts'
+import { askCoachAtom } from '../features/coach/atoms.ts'
 import { createDocumentAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { resizedFont } from '../features/settings/settings.ts'
@@ -45,6 +46,7 @@ function toggleView(settings: Settings, id: ActionId): Settings {
 export function useActions(): (id: ActionId) => void {
   const setSettings = useAtomSet(settingsAtom)
   const createDocument = useAtomSet(createDocumentAtom)
+  const askCoach = useAtomSet(askCoachAtom)
   const input = useAtomValue(editorInputAtom)
 
   return useCallback(
@@ -61,8 +63,14 @@ export function useActions(): (id: ActionId) => void {
         return
       }
 
+      if (id === 'coach') {
+        askCoach()
+
+        return
+      }
+
       setSettings((settings) => toggleView(settings, id))
     },
-    [createDocument, input, setSettings],
+    [askCoach, createDocument, input, setSettings],
   )
 }

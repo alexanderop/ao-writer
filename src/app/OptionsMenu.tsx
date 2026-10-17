@@ -117,6 +117,18 @@ export function OptionsMenu() {
           {/* focus mode centres the line itself; the box shows that, and keeps the writer's own choice for when focus ends */}
           <CheckRow row={{ key: 'typewriter', label: 'Typewriter scrolling' }} settings={settings} checked={typewriterActive(settings)} disabled={settings.focus} onToggle={toggle} />
         </Section>
+        <Section title="Coach">
+          <Segmented
+            label="Coach"
+            value={settings.coach}
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'ask', label: 'When asked' },
+              { value: 'pause', label: 'On pauses' },
+            ]}
+            onChange={(coach) => patch({ coach })}
+          />
+        </Section>
         <Section title="Keys">
           <CheckRow row={{ key: 'vim', label: 'Vim keybindings' }} settings={settings} onToggle={toggle} />
         </Section>
