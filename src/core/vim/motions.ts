@@ -21,7 +21,7 @@ export function classOf(char: string): CharClass {
 }
 
 /** WORD classes for `W` `B` `E`: anything that is not a blank belongs to the same WORD. */
-export function bigClassOf(char: string): CharClass {
+function bigClassOf(char: string): CharClass {
   const kind = classOf(char)
 
   return kind === 'punctuation' ? 'word' : kind
