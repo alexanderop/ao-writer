@@ -8,6 +8,7 @@ import { bootAtom, flushAtom, loadedAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { CoachDot, useCoach } from './Coach.tsx'
 import { Editor } from './Editor.tsx'
+import { IllustrateDot } from './Illustrate.tsx'
 import { Preview } from './Preview.tsx'
 import { Sidebar } from './Sidebar.tsx'
 import { StatusBar } from './StatusBar.tsx'
@@ -95,6 +96,7 @@ export function App() {
       <main className="relative flex min-w-0 flex-1">
         <TopBar isMac={isMac} run={run} />
         <CoachDot isMac={isMac} />
+        <IllustrateDot />
         {loaded ? (
           <div className="flex h-full min-w-0 flex-1">
             {full ? null : (

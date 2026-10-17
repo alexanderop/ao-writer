@@ -42,6 +42,12 @@ describe('matchesChord', () => {
     expect(findAction(press('Digit2', '™', { metaKey: true, altKey: true }), true)).toBe('h2')
   })
 
+  it('keeps Cmd+Shift+I for Illustrate and leaves Cmd+I to italic', () => {
+    expect(findAction(press('KeyI', 'I', { metaKey: true, shiftKey: true }), true)).toBe('illustrate')
+    expect(findAction(press('KeyI', 'i', { metaKey: true }), true)).toBe('italic')
+    expect(findAction(press('KeyI', 'ˆ', { ctrlKey: true, altKey: true }), false)).toBe('illustrate')
+  })
+
   it('maps blockquote to Cmd+Shift+period', () => {
     expect(findAction(press('Period', '>', { metaKey: true, shiftKey: true }), true)).toBe('quote')
   })
