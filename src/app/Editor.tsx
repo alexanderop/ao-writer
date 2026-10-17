@@ -14,6 +14,7 @@ import { settingsAtom } from '../features/settings/atoms.ts'
 import { typewriterActive } from '../features/settings/settings.ts'
 import { CoachMarks } from './Coach.tsx'
 import { applyEdit, editorInputAtom } from './editor-input.ts'
+import { IllustratePrompt } from './IllustratePrompt.tsx'
 import { useCaretScroll } from './useCaretScroll.ts'
 import { runVimKey } from './vim-input.ts'
 import { visualRows } from './vim-rows.ts'
@@ -321,6 +322,7 @@ export function Editor() {
             onKeyDown={onKeyDown}
           />
           <CoachMarks layerRef={highlightRef} />
+          <IllustratePrompt layerRef={highlightRef} />
         </div>
       </div>
     </div>

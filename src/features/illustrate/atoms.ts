@@ -2,14 +2,14 @@ import { Effect, Option } from 'effect'
 import * as Atom from 'effect/reactivity/Atom'
 import { AtomRegistry } from 'effect/reactivity/AtomRegistry'
 
-import { illustrationEdit } from '../../core/illustrate/place.ts'
+import { altEdit, placementEdit, withdrawEdit } from '../../core/illustrate/place.ts'
 import { findIllustrateTarget } from '../../core/illustrate/prompt.ts'
 import type { IllustrateTarget } from '../../core/illustrate/prompt.ts'
 import { applyEdit, editorInputAtom } from '../../app/editor-input.ts'
 import { selectionAtom, textAtom } from '../editor/atoms.ts'
 import { activeIdAtom } from '../library/atoms.ts'
 import { settingsAtom } from '../settings/atoms.ts'
-import { imagePath, pngToWebp, writeImage } from './images.ts'
+import { imagesVersionAtom, pngToWebp, writeImage } from './images.ts'
 import { illustrate } from './server.ts'
 
 /** What the illustrations are doing: nothing, drawing (that many at once), or the last one did not work out. */
@@ -18,13 +18,16 @@ export type IllustrateStatus =
   | { readonly kind: 'running'; readonly count: number }
   | { readonly kind: 'failed'; readonly message: string }
 
-const NO_TARGET = 'Select some text, or put the caret in an image like ![a fox at dawn]().'
-
 const NO_SERVER = 'Illustrate needs the local dev server (pnpm dev) and a Codex login.'
 
 const NOT_DRAWN = 'The picture could not be prepared.'
 
-const NO_PLACE = 'The empty image is gone, so the picture has no place.'
+const NO_PLACE = 'The placeholder is gone, so the picture has no place.'
+
+/** The prompt box for a picture the writer describes: closed, or open at the caret offset it was asked for. */
+export type IllustratePrompt = { readonly kind: 'closed' } | { readonly kind: 'open'; readonly at: number }
+
+export const illustratePromptAtom = Atom.make<IllustratePrompt>({ kind: 'closed' }).pipe(Atom.keepAlive)
 
 /** The illustration status the dot under the top bar shows. */
 export const illustrateStatusAtom = Atom.make<IllustrateStatus>({ kind: 'idle' }).pipe(Atom.keepAlive)
@@ -43,40 +46,63 @@ function finished(registry: AtomRegistry, failure: string | null): void {
   registry.set(illustrateStatusAtom, remaining > 0 ? { kind: 'running', count: remaining } : failure === null ? { kind: 'idle' } : { kind: 'failed', message: failure })
 }
 
-/** Has Codex draw the picture, stores it, and puts it in the text; resolves with why that did not work, or null. */
-const drawn = Effect.fnUntraced(function* (registry: AtomRegistry, target: IllustrateTarget, documentId: string) {
-  const rendered = yield* Effect.tryPromise(() => illustrate({ data: { description: target.description, theme: registry.get(settingsAtom).theme } })).pipe(Effect.option)
+/** What Codex made and the browser stored under the id, or why it did not work out. */
+type Stored = { readonly ok: true; readonly alt: string } | { readonly ok: false; readonly reason: string }
 
-  if (Option.isNone(rendered)) return NO_SERVER
+/** Has Codex draw the picture for the description and stores it as `images/<id>.webp`. */
+const stored = Effect.fnUntraced(function* (registry: AtomRegistry, description: string, id: string) {
+  const rendered = yield* Effect.tryPromise(() => illustrate({ data: { description, theme: registry.get(settingsAtom).theme } })).pipe(Effect.option)
 
-  if (!rendered.value.ok) return rendered.value.reason
+  if (Option.isNone(rendered)) return { ok: false, reason: NO_SERVER } as const
 
-  const { png } = rendered.value
+  if (!rendered.value.ok) return { ok: false, reason: rendered.value.reason } as const
+
+  const { png, alt } = rendered.value
   const webp = yield* Effect.tryPromise(() => pngToWebp(png)).pipe(Effect.option)
 
-  if (Option.isNone(webp)) return NOT_DRAWN
+  if (Option.isNone(webp)) return { ok: false, reason: NOT_DRAWN } as const
 
-  // a picture for a document the writer has left has no place in the one on screen
-  if (registry.get(activeIdAtom) !== documentId) return null
-
-  const id = crypto.randomUUID().slice(0, 8)
   const blob = webp.value
 
   yield* Effect.promise(() => writeImage(`${id}.webp`, blob))
+  registry.update(imagesVersionAtom, (version) => version + 1)
+
+  return { ok: true, alt: alt ?? description } as const
+})
+
+/** Has Codex draw the picture for the placeholder `id` and settles the placeholder; resolves with why that did not work, or null. */
+const drawn = Effect.fnUntraced(function* (registry: AtomRegistry, description: string, id: string, documentId: string) {
+  const result: Stored = yield* stored(registry, description, id)
+
+  // a document the writer has left is not touched; the picture is stored, so it shows if they come back
+  if (registry.get(activeIdAtom) !== documentId) return result.ok ? null : result.reason
 
   const input = registry.get(editorInputAtom)
 
-  // the writer kept typing while the picture was made, so the place is looked up in the text as it is now
-  const edit = input === null ? null : illustrationEdit(input.value, target, imagePath(id), input.selectionStart, input.selectionEnd)
+  // the writer kept typing while the picture was made, so the placeholder is looked up in the text as it is now
+  const edit = input === null ? null : result.ok ? altEdit(input.value, id, result.alt, input.selectionStart, input.selectionEnd) : withdrawEdit(input.value, id, input.selectionStart, input.selectionEnd)
 
-  if (input === null || edit === null) return NO_PLACE
+  if (input !== null && edit !== null) applyEdit(input, edit)
 
-  applyEdit(input, edit)
+  if (!result.ok) return result.reason
 
-  return null
+  return edit === null ? NO_PLACE : null
 })
 
-/** Illustrates the empty image under the caret, or the selected text, with a picture from Codex. */
+/** Puts the placeholder in the text right away, then has Codex draw the picture for it. */
+const illustrating = Effect.fnUntraced(function* (registry: AtomRegistry, target: IllustrateTarget, documentId: string) {
+  const input = registry.get(editorInputAtom)
+
+  if (input === null) return
+
+  const id = crypto.randomUUID().slice(0, 8)
+
+  applyEdit(input, placementEdit(input.value, target, id, input.selectionStart, input.selectionEnd))
+  started(registry)
+  finished(registry, yield* drawn(registry, target.description, id, documentId))
+})
+
+/** Illustrates the empty image under the caret or the selected text; with neither, opens the prompt box at the caret. */
 export const illustrateAtom = Atom.fn<void>()(
   Effect.fnUntraced(function* () {
     const registry = yield* AtomRegistry
@@ -87,15 +113,27 @@ export const illustrateAtom = Atom.fn<void>()(
     if (documentId === null) return
 
     if (target === null) {
-      registry.set(illustrateStatusAtom, { kind: 'failed', message: NO_TARGET })
+      registry.set(illustratePromptAtom, { kind: 'open', at: end })
 
       return
     }
 
-    started(registry)
-    finished(registry, yield* drawn(registry, target, documentId))
+    yield* illustrating(registry, target, documentId)
   }),
   // a second picture asked for while the first is drawing must not cancel it
   { concurrent: true },
   // the dot keeps its status with nothing subscribed to the atom itself
+).pipe(Atom.keepAlive)
+
+/** Illustrates what the writer typed into the prompt box, at the caret the box opened at. */
+export const illustrateDescriptionAtom = Atom.fn<{ readonly description: string; readonly at: number }>()(
+  Effect.fnUntraced(function* ({ description, at }) {
+    const registry = yield* AtomRegistry
+    const documentId = registry.get(activeIdAtom)
+
+    if (documentId === null) return
+
+    yield* illustrating(registry, { kind: 'prompt', description, insertAt: at }, documentId)
+  }),
+  { concurrent: true },
 ).pipe(Atom.keepAlive)

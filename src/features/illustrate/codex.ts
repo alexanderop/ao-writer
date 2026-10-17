@@ -4,6 +4,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { cleanAlt } from '../../core/illustrate/alt.ts'
+
 /**
 Runs the Codex CLI to render one picture. It runs on the dev server only, on the writer's own Codex login.
 */
@@ -15,8 +17,8 @@ const TIMEOUT_MS = 180_000
 /** Codex runs at once; the rest wait their turn. */
 const MAX_RUNS = 2
 
-/** What a run leaves: the PNG as base64, or a short reason it did not. */
-export type Rendered = { readonly ok: true; readonly png: string } | { readonly ok: false; readonly reason: string }
+/** What a run leaves: the PNG as base64 and the alt text Codex wrote for it (null when it wrote none), or a short reason it did not. */
+export type Rendered = { readonly ok: true; readonly png: string; readonly alt: string | null } | { readonly ok: false; readonly reason: string }
 
 let running = 0
 
@@ -41,7 +43,7 @@ function runCodex(directory: string, prompt: string): Promise<{ code: number | n
     // stdin must be closed: with a pipe, codex waits on "Reading additional input from stdin"
     const child = spawn(
       'codex',
-      ['exec', '--skip-git-repo-check', '--ephemeral', '-m', MODEL, '-c', 'model_reasoning_effort="low"', '-s', 'workspace-write', '-C', directory, prompt],
+      ['exec', '--skip-git-repo-check', '--ephemeral', '-m', MODEL, '-c', 'model_reasoning_effort="low"', '-s', 'workspace-write', '-C', directory, '-o', join(directory, 'last.txt'), prompt],
       { stdio: ['ignore', 'ignore', 'pipe'], timeout: TIMEOUT_MS },
     )
 
@@ -73,7 +75,9 @@ export function renderWithCodex(prompt: string): Promise<Rendered> {
         return { ok: false, reason: run.code === 0 ? 'Codex did not make a picture.' : 'Codex could not draw it. Is it logged in?' }
       }
 
-      return { ok: true, png: png.toString('base64') }
+      const reply = await readFile(join(directory, 'last.txt'), 'utf8').catch(() => '')
+
+      return { ok: true, png: png.toString('base64'), alt: cleanAlt(reply) }
     } catch (cause) {
       return { ok: false, reason: cause instanceof Error && 'code' in cause && cause.code === 'ENOENT' ? 'The codex command is not installed.' : 'Codex could not be started.' }
     } finally {

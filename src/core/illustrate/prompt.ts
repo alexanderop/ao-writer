@@ -1,8 +1,8 @@
-/** What the writer asked to illustrate: the empty image under the caret, or the selected text. */
+/** What the writer asked to illustrate: the empty image under the caret, the selected text, or a description typed into the prompt box. */
 export interface IllustrateTarget {
-  readonly kind: 'emptyImage' | 'selection'
+  readonly kind: 'emptyImage' | 'selection' | 'prompt'
   readonly description: string
-  /** Where the picture goes: the offset inside the empty `()`, or the end of the paragraph the selection is in. */
+  /** Where the picture goes: the offset inside the empty `()`, the end of the paragraph the selection is in, or the caret the prompt box opened at. */
   readonly insertAt: number
 }
 
@@ -28,6 +28,7 @@ export function illustrationPrompt(description: string, theme: 'light' | 'dark')
     ...style,
     `Subject: ${description}`,
     'Save it as ./out.png in the current directory.',
+    'Then reply with only the alt text for the picture you made: one sentence, under 125 characters, describing what is visible. No quotes.',
   ].join('\n')
 }
 
@@ -43,7 +44,7 @@ interface EmptyImage {
 }
 
 /** Every empty image with a description in the text, in order. */
-export function emptyImages(text: string): readonly EmptyImage[] {
+function emptyImages(text: string): readonly EmptyImage[] {
   return [...text.matchAll(/!\[([^\]\n]*)\]\(\)/g)].flatMap((match) => {
     const description = match[1]?.trim() ?? ''
 

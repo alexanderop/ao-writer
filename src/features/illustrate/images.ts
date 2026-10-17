@@ -1,3 +1,5 @@
+import * as Atom from 'effect/reactivity/Atom'
+
 /**
 The pictures of the documents. They live in the browser next to the documents, in the OPFS subfolder `ao-writer/images`
 (a subfolder, so the document listing that scans `ao-writer` never sees them). Where OPFS does not work, the session
@@ -17,10 +19,8 @@ async function imageFolder(): Promise<FileSystemDirectoryHandle> {
   return folder.getDirectoryHandle(SUBFOLDER, { create: true })
 }
 
-/** The relative Markdown path of a picture. */
-export function imagePath(id: string): string {
-  return `${SUBFOLDER}/${id}.webp`
-}
+/** Counts the pictures written so far, so a preview that showed a placeholder for one knows to look again. */
+export const imagesVersionAtom = Atom.make(0).pipe(Atom.keepAlive)
 
 /** The file name behind an `images/<id>.webp` path from the text, or null for any other source. */
 export function imageName(src: string): string | null {

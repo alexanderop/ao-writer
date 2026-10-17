@@ -39,7 +39,7 @@ interface Box {
 }
 
 /** The line boxes of a character range in the highlight layer, relative to the layer. */
-function rangeBoxes(layer: HTMLElement, start: number, end: number): Box[] {
+export function rangeBoxes(layer: HTMLElement, start: number, end: number): Box[] {
   const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT)
   const range = document.createRange()
   let offset = 0

@@ -14,6 +14,7 @@ describe('illustrationPrompt', () => {
         'Aspect ratio: 16:9.',
         'Subject: a fox reading the paper at dawn',
         'Save it as ./out.png in the current directory.',
+        'Then reply with only the alt text for the picture you made: one sentence, under 125 characters, describing what is visible. No quotes.',
       ].join('\n'),
     )
   })
