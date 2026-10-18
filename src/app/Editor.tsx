@@ -13,6 +13,7 @@ import { activeIdAtom, autosaveAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
 import { typewriterActive } from '../features/settings/settings.ts'
 import { CoachMarks } from './Coach.tsx'
+import { StyleSuggestions } from './StyleSuggestions.tsx'
 import { applyEdit, editorInputAtom } from './editor-input.ts'
 import { IllustratePrompt } from './IllustratePrompt.tsx'
 import { IllustrationCards } from './IllustrationCards.tsx'
@@ -322,6 +323,7 @@ export function Editor() {
             onChange={onChange}
             onKeyDown={onKeyDown}
           />
+          <StyleSuggestions layerRef={highlightRef} />
           <CoachMarks layerRef={highlightRef} />
           <IllustrationCards layerRef={highlightRef} />
           <IllustratePrompt layerRef={highlightRef} />

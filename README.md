@@ -76,6 +76,9 @@ WebAssembly), and each grammar is its own chunk that is fetched the first time a
 without a supported fence never loads any of it. In the editor only the colour changes (never weight, style
 or size), so the overlay stays aligned with the textarea; tokens arrive about 120 ms after you stop typing,
 are cached per block (language and code), and a block that is still waiting keeps the plain code styling.
+
+Hover a style-check underline to ask the AI coach for a targeted suggestion. The card explains the change and shows the rewrite before you apply it; native Undo restores the original. You can also click an underline or reach it with Tab and Enter. Suggestions use the coach’s teaching principles, writer profile and word book, and need the local server and Claude Code login. Changing the draft dismisses the old suggestion.
+
 Parts-of-speech and style-check colouring skip code, as before.
 
 ## Vim keybindings
