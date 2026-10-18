@@ -6,6 +6,9 @@ import { typingAtom, vimAtom } from '../features/editor/atoms.ts'
 import { highlightAtom } from '../features/highlight/atoms.ts'
 import { bootAtom, flushAtom, loadedAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
+import { learningAtom, learningOpenAtom } from '../features/learn/atoms.ts'
+import { Learn } from './Learn.tsx'
+import { editorInputAtom } from './editor-input.ts'
 import { CoachDot, useCoach } from './Coach.tsx'
 import { Editor } from './Editor.tsx'
 import { IllustrateDot } from './Illustrate.tsx'
@@ -48,8 +51,12 @@ function useChromeReturn(): void {
 }
 
 /** Writes the open document when the tab hides or closes, instead of waiting for the autosave pause. */
-function useFlushOnLeave(): void {
+function useFlushOnLeave(learning: boolean): void {
   const flush = useAtomSet(flushAtom)
+
+  useEffect(() => {
+    if (learning) flush()
+  }, [learning, flush])
 
   useEffect(() => {
     const onHide = (): void => flush()
@@ -71,6 +78,8 @@ function useFlushOnLeave(): void {
 /** The whole app: library, editor, optional preview, and the two bars of chrome. */
 export function App() {
   const settings = useAtomValue(settingsAtom)
+  const learning = useAtomValue(learningOpenAtom)
+  const input = useAtomValue(editorInputAtom)
   const loaded = useAtomValue(loadedAtom)
   const typing = useAtomValue(typingAtom)
   const vim = useAtomValue(vimAtom)
@@ -79,10 +88,15 @@ export function App() {
 
   useAtomMount(bootAtom)
   useAtomMount(highlightAtom)
-  useShortcuts(isMac, run, settings.vim && vim.mode !== 'insert')
+  useAtomMount(learningAtom)
+  useShortcuts(isMac, run, settings.vim && vim.mode !== 'insert', learning)
   useChromeReturn()
-  useFlushOnLeave()
+  useFlushOnLeave(learning)
   useCoach()
+
+  useEffect(() => {
+    if (!learning) input?.focus()
+  }, [learning, input])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', settings.theme === 'dark')
@@ -92,14 +106,13 @@ export function App() {
   const style: CSSProperties & { '--font-size': string } = { '--font-size': `${settings.fontSize}px` }
 
   return (
-    <div className="app relative flex h-screen w-screen overflow-hidden" data-typing={typing} data-typeface={settings.typeface} style={style} data-testid="app">
+    <div className="app relative flex h-screen w-screen overflow-hidden" data-typing={typing && !learning} data-typeface={settings.typeface} style={style} data-testid="app">
       <Sidebar open={settings.sidebar} isMac={isMac} />
       <main className="relative flex min-w-0 flex-1">
         <TopBar isMac={isMac} run={run} />
-        <CoachDot isMac={isMac} />
-        <IllustrateDot />
+        {learning ? <Learn /> : <><CoachDot isMac={isMac} /><IllustrateDot /></>}
         {loaded ? (
-          <div className="flex h-full min-w-0 flex-1">
+          <div className={learning ? 'hidden' : 'flex h-full min-w-0 flex-1'} inert={learning}>
             {full ? null : (
               <section className="h-full min-w-0 flex-1" aria-label="Editor">
                 <Editor />
@@ -112,8 +125,8 @@ export function App() {
             ) : null}
           </div>
         ) : null}
-        <PlanPanel isMac={isMac} />
-        <StatusBar isMac={isMac} run={run} />
+        {learning ? null : <PlanPanel isMac={isMac} />}
+        {learning ? null : <StatusBar isMac={isMac} run={run} />}
       </main>
     </div>
   )

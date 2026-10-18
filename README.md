@@ -153,6 +153,26 @@ Without typewriter scrolling the page only scrolls when the caret comes within 9
 
 ![Focus mode, dark](docs/screenshots/17-focus-dark.png)
 
+## Learn English
+
+Open **Learn English** with the graduation-cap button in the top bar, or the **Learn** tab in the sidebar.
+Add an English word with its German meaning and an optional example, or choose **Prepare with coach** to generate
+the meaning and example. Words from the coach's existing word book can also be added to practice.
+
+Enable **Learn from corrections I accept** to save English spelling corrections when you run **Fix spelling and grammar**.
+Only corrections actually applied outside code are captured. Repeated misspellings update one entry, keep the original
+misspellings and correction count, and make that word due again. This first version trains spelling and vocabulary;
+grammar corrections still work in the editor but do not become practice cards.
+
+Sessions contain up to five due words, showing a German cue and an example with the answer hidden. Type the English
+word, get feedback, and retry difficult spellings. A correct first answer schedules reviews after 1, 3, 7, 14, then 30 days;
+wrong or revealed answers return tomorrow, and retries do not count as unaided recall. Remove unwanted words from the
+practice book. Vocabulary prompts currently check the saved target word, ignoring case and outer whitespace.
+
+Practice cards, the capture preference and review progress are saved in this browser independently of the server's
+Markdown word book. Practice and manual entry work without the AI server; generating German prompts and fixing text
+need `pnpm dev` and a Claude Code login. Browser data does not sync between browsers and is removed if site data is cleared.
+
 ## How it works
 
 - **Editor**: a `<textarea>` (it owns input, selection, IME and undo) over a transparent-text highlight layer

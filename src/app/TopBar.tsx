@@ -1,4 +1,4 @@
-import { useAtomValue } from '@effect/atom-react'
+import { useAtom, useAtomValue } from '@effect/atom-react'
 import {
   Bold,
   Code,
@@ -6,6 +6,7 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  GraduationCap,
   Italic,
   Link,
   List,
@@ -21,6 +22,7 @@ import { shortcutLabel } from '../core/shortcuts.ts'
 import type { ActionId } from '../core/shortcuts.ts'
 import { activeIdAtom, documentsAtom } from '../features/library/atoms.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
+import { learningOpenAtom } from '../features/learn/atoms.ts'
 import { ToolButton } from './ToolButton.tsx'
 
 interface FormatEntry {
@@ -58,6 +60,7 @@ interface TopBarProps {
 
 /** The library toggle, the document name and the format buttons. It fades while typing. */
 export function TopBar({ isMac, run }: TopBarProps) {
+  const [learning, setLearning] = useAtom(learningOpenAtom)
   const settings = useAtomValue(settingsAtom)
   const documents = useAtomValue(documentsAtom)
   const activeId = useAtomValue(activeIdAtom)
@@ -69,11 +72,12 @@ export function TopBar({ isMac, run }: TopBarProps) {
         <ToolButton label="Library" shortcut={shortcutLabel('library', isMac)} pressed={settings.sidebar} testId="sidebar-toggle" onClick={() => run('library')}>
           <PanelLeft />
         </ToolButton>
+        <ToolButton label="Learn English" pressed={learning} testId="learning-toggle" onClick={() => setLearning(!learning)}><GraduationCap /></ToolButton>
         <span className="max-w-48 truncate text-xs text-ink-faint" data-testid="document-name">
-          {name}
+          {learning ? 'Learn English' : name}
         </span>
       </div>
-      <div className="pointer-events-auto ml-auto flex items-center gap-1" role="toolbar" aria-label="Format">
+      {learning ? null : <div className="pointer-events-auto ml-auto flex items-center gap-1" role="toolbar" aria-label="Format">
         {FORMAT_GROUPS.map((group, index) => (
           <div key={index} className="flex items-center gap-0.5 border-l border-rule pl-1 first:border-l-0 first:pl-0">
             {group.map((entry) => (
@@ -83,7 +87,7 @@ export function TopBar({ isMac, run }: TopBarProps) {
             ))}
           </div>
         ))}
-      </div>
+      </div>}
     </header>
   )
 }

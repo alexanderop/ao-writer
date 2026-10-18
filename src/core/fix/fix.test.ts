@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
-import { applyFixes, fixEdit, fixPrompt, parseFixes } from './fix.ts'
+import { applyFixes, fixEdit, fixPrompt, parseFixes, spellingForPractice } from './fix.ts'
 
 describe('parseFixes', () => {
+  it('reads optional German practice metadata while preserving older replies', () => {
+    const practice = { word: 'requirement', german: 'Anforderung', sentence: 'A requirement.', explanation: 'require + ment' }
+    const fixes = [{ wrong: 'requement', right: 'requirement', practice }]
+
+    expect(parseFixes(JSON.stringify({ fixes }))).toEqual(fixes)
+    expect(spellingForPractice({ ...fixes[0], wrong: 'a requement', right: 'a requirement' })).toEqual({ entry: practice, mistake: 'requement' })
+    expect(spellingForPractice({ ...fixes[0], wrong: 'requirement are', right: 'requirement is' })).toBeNull()
+    expect(spellingForPractice({ wrong: 'teh', right: 'the' })).toBeNull()
+  })
   it('reads fixes, wrapped in prose or a fence', () => {
     const fixes = [{ wrong: 'teh app', right: 'the app' }]
 
@@ -23,6 +32,19 @@ describe('parseFixes', () => {
 })
 
 describe('applyFixes', () => {
+  it('only reports applied corrections for learning, skipping code, missing and overlapping passages', () => {
+    const applied: string[] = []
+
+    applyFixes('`requement` and i has went', [
+      { wrong: 'requement', right: 'requirement' },
+      { wrong: 'missing', right: 'word' },
+      { wrong: 'i has', right: 'I have' },
+      { wrong: 'has went', right: 'have gone' },
+    ], (fix) => applied.push(fix.wrong))
+
+    expect(applied).toEqual(['i has'])
+  })
+
   it('fixes every place the passage occurs and counts them', () => {
     expect(applyFixes('teh cat and teh dog', [{ wrong: 'teh', right: 'the' }])).toEqual({ text: 'the cat and the dog', count: 2 })
   })

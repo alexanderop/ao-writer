@@ -1,4 +1,4 @@
-import { useAtomSet, useAtomValue } from '@effect/atom-react'
+import { useAtom, useAtomSet, useAtomValue } from '@effect/atom-react'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import { Check, FilePlus2, Pencil, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -19,6 +19,7 @@ import {
 } from '../features/library/atoms.ts'
 import type { DocumentMeta } from '../features/library/model.ts'
 import { settingsAtom } from '../features/settings/atoms.ts'
+import { learningOpenAtom } from '../features/learn/atoms.ts'
 import { CoachJournal } from './CoachJournal.tsx'
 import { ToolButton } from './ToolButton.tsx'
 
@@ -135,9 +136,10 @@ function Tab({ label, active, onClick }: { label: string; active: boolean; onCli
 
 /** The library: every document in the browser, newest first. Next to it, the coach's journal while the coach is on. */
 export function Sidebar({ open, isMac }: SidebarProps) {
+  const [learning, setLearning] = useAtom(learningOpenAtom)
   const coach = useAtomValue(settingsAtom).coach !== 'off'
   const [tab, setTab] = useState<'library' | 'coach'>('library')
-  const showCoach = coach && tab === 'coach'
+  const showCoach = !learning && coach && tab === 'coach'
   const documents = useAtomValue(documentsAtom)
   const activeId = useAtomValue(activeIdAtom)
   const problem = useAtomValue(storageProblemAtom)
@@ -154,19 +156,22 @@ export function Sidebar({ open, isMac }: SidebarProps) {
     >
       <div className="flex h-full w-60 flex-col">
         <div className="flex h-12 items-center justify-between pr-3 pl-4">
-          {coach ? (
-            <div role="tablist" className="flex gap-3">
-              <Tab label="Library" active={!showCoach} onClick={() => setTab('library')} />
-              <Tab label="Coach" active={showCoach} onClick={() => setTab('coach')} />
-            </div>
-          ) : (
-            <h2 className="text-xs font-bold tracking-wider text-ink-faint uppercase">Library</h2>
-          )}
-          <ToolButton label="New document" shortcut={shortcutLabel('newDocument', isMac)} testId="new-document" onClick={() => create()}>
+          <div role="tablist" aria-label="Workspace" className="flex gap-3">
+            <Tab label="Library" active={!showCoach && !learning} onClick={() => { setTab('library'); setLearning(false) }} />
+            {coach ? <Tab label="Coach" active={showCoach} onClick={() => { setTab('coach'); setLearning(false) }} /> : null}
+            <Tab label="Learn" active={learning} onClick={() => setLearning(true)} />
+          </div>
+          {learning ? null : <ToolButton label="New document" shortcut={shortcutLabel('newDocument', isMac)} testId="new-document" onClick={() => create()}>
             <FilePlus2 />
-          </ToolButton>
+          </ToolButton>}
         </div>
-        {showCoach ? (
+        {learning ? (
+          <div className="flex-1 space-y-3 px-4 py-2 text-xs leading-relaxed text-ink-soft">
+            <p>Turn the words you write into words you remember.</p>
+            <p>Practise spelling, learn vocabulary, and revisit difficult words in short sessions.</p>
+            <button type="button" className="font-bold text-accent" onClick={() => setLearning(false)}>Back to writing</button>
+          </div>
+        ) : showCoach ? (
           <CoachJournal />
         ) : (
           <ul className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">

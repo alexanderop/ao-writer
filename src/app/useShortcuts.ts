@@ -8,7 +8,7 @@ Listens for the app's shortcuts on the whole window. The listener runs in the ca
 Format shortcuts only fire while the editor has focus, so typing in the rename field is not hijacked.
 `vimCommands` is true while the editor is in Vim's normal or visual mode, where Ctrl+R is redo and so does not toggle the preview.
 */
-export function useShortcuts(isMac: boolean, run: (id: ActionId) => void, vimCommands: boolean): void {
+export function useShortcuts(isMac: boolean, run: (id: ActionId) => void, vimCommands: boolean, learning = false): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.isComposing) return
@@ -16,6 +16,8 @@ export function useShortcuts(isMac: boolean, run: (id: ActionId) => void, vimCom
       const action = findAction(event, isMac)
 
       if (action === null) return
+
+      if (learning && action !== 'library' && action !== 'theme') return
 
       const inEditor = event.target instanceof HTMLElement && event.target.matches('[data-editor-input]')
 
@@ -31,5 +33,5 @@ export function useShortcuts(isMac: boolean, run: (id: ActionId) => void, vimCom
     window.addEventListener('keydown', onKeyDown, { capture: true })
 
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
-  }, [isMac, run, vimCommands])
+  }, [isMac, run, vimCommands, learning])
 }

@@ -2,7 +2,10 @@ import { Effect, Option } from 'effect'
 import * as Atom from 'effect/reactivity/Atom'
 import { AtomRegistry } from 'effect/reactivity/AtomRegistry'
 
-import { applyFixes, fixEdit } from '../../core/fix/fix.ts'
+import { applyFixes, fixEdit, spellingForPractice } from '../../core/fix/fix.ts'
+import type { Fix } from '../../core/fix/fix.ts'
+import { rememberWord } from '../../core/learn/practice.ts'
+import { learningAtom } from '../learn/atoms.ts'
 import { applyEdit, editorInputAtom } from '../../app/editor-input.ts'
 import { activeIdAtom } from '../library/atoms.ts'
 import { askFixes } from './server.ts'
@@ -13,8 +16,6 @@ export type FixStatus = { readonly kind: 'idle' } | { readonly kind: 'fixing' } 
 const OFFLINE = 'Fixing needs the local dev server (pnpm dev) and a Claude Code login.'
 
 export const fixStatusAtom = Atom.make<FixStatus>({ kind: 'idle' }).pipe(Atom.keepAlive)
-
-let nextRun = 0
 
 /** Fixes spelling and grammar in the selection, or in the whole document when nothing is selected, as one edit to undo. */
 export const fixAtom = Atom.fn<void>()(
@@ -33,7 +34,7 @@ export const fixAtom = Atom.fn<void>()(
 
     registry.set(fixStatusAtom, { kind: 'fixing' })
 
-    const reply = yield* Effect.tryPromise(() => askFixes({ data: { key: `fix:${++nextRun}`, text: asked } })).pipe(Effect.option)
+    const reply = yield* Effect.tryPromise(() => askFixes({ data: { key: `fix:${crypto.randomUUID()}`, text: asked } })).pipe(Effect.option)
 
     if (Option.isNone(reply) || reply.value.fixes === null) {
       registry.set(fixStatusAtom, { kind: 'done', message: Option.isNone(reply) ? OFFLINE : 'The answer did not come through. Try again.' })
@@ -50,10 +51,25 @@ export const fixAtom = Atom.fn<void>()(
 
     // a selection stays the only part fixed while it is still where it was; otherwise the fixes go wherever their passage is
     const inPlace = !whole && current.value.slice(from, from + asked.length) === asked
-    const fixed = applyFixes(inPlace ? asked : current.value, reply.value.fixes)
+    const applied: Fix[] = []
+    const fixed = applyFixes(inPlace ? asked : current.value, reply.value.fixes, (fix) => applied.push(fix))
     const text = inPlace ? current.value.slice(0, from) + fixed.text + current.value.slice(from + asked.length) : fixed.text
 
     if (fixed.count > 0) applyEdit(current, fixEdit(current.value, text, current.selectionEnd))
+
+    const learning = registry.get(learningAtom)
+
+    if (learning.rememberCorrections) {
+      let cards = learning.cards
+
+      for (const fix of applied) {
+        const spelling = spellingForPractice(fix)
+
+        if (spelling !== null) cards = rememberWord(cards, spelling.entry, Date.now(), spelling.mistake)
+      }
+
+      if (cards !== learning.cards) registry.set(learningAtom, { ...learning, cards })
+    }
 
     registry.set(fixStatusAtom, { kind: 'done', message: fixed.count === 0 ? 'No mistakes found' : `Fixed ${fixed.count} ${fixed.count === 1 ? 'spot' : 'spots'} · undo reverts` })
   }),

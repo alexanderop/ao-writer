@@ -7,11 +7,11 @@ import { defaultSettings, Settings } from './settings.ts'
 const SETTINGS_KEY = 'ao-writer:settings'
 
 /** Browser storage as a key-value store; the app route is client-only, so this only runs in the browser. */
-const storage = Atom.runtime(KeyValueStore.layerStorage(() => localStorage))
+export const browserStorage = Atom.runtime(KeyValueStore.layerStorage(() => localStorage))
 
 /** The writer's settings, kept in localStorage. */
 export const settingsAtom = Atom.kvs({
-  runtime: storage,
+  runtime: browserStorage,
   key: SETTINGS_KEY,
   schema: Settings,
   defaultValue: () => defaultSettings(window.matchMedia('(prefers-color-scheme: dark)').matches),

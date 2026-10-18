@@ -1,5 +1,7 @@
 import { Option, Schema } from 'effect'
 
+import { PracticeWord } from '../learn/practice.ts'
+
 import type { TextEdit } from '../markdown/format.ts'
 
 /*
@@ -8,7 +10,7 @@ and voice stay theirs. The swaps are applied here, outside code and link targets
 */
 
 /** One correction: a short passage copied from the text, and the same passage corrected. */
-const Fix = Schema.Struct({ wrong: Schema.String, right: Schema.String })
+const Fix = Schema.Struct({ wrong: Schema.String, right: Schema.String, practice: Schema.optionalKey(PracticeWord) })
 
 export type Fix = typeof Fix.Type
 
@@ -27,6 +29,7 @@ export const FIX_INSTRUCTIONS = `You are a proofreader. You correct spelling, gr
 - Leave code, inline code, URLs, Markdown syntax and proper names alone.
 - Each fix copies a short passage character for character from the draft ("wrong"), just long enough to be unique (a few words), and gives the same passage corrected ("right").
 - If there is nothing to fix, return an empty list.
+- For an English spelling mistake only, optionally add "practice": {"word": "<the corrected English word alone>", "german": "<short German meaning in this context, without the English answer>", "sentence": "<a short corrected English example containing that exact word>", "explanation": "<brief English spelling cue or meaning>"}. Do not add practice for grammar, punctuation, proper names, non-English words, or correct word choices. The word must be the spelling you actually corrected in "right".
 
 Reply with JSON only, no code fence: {"fixes": [{"wrong": "<passage from the draft>", "right": "<the corrected passage>"}]}`
 
@@ -56,6 +59,25 @@ function protectedRanges(text: string): readonly (readonly [number, number])[] {
   return ranges
 }
 
+/** Learn only the changed word, never an unchanged neighbour in the proofreader's passage. */
+export function spellingForPractice(fix: Fix): { readonly entry: PracticeWord; readonly mistake: string } | null {
+  const entry = fix.practice
+
+  if (entry === undefined) return null
+
+  const before = fix.wrong.match(/[a-z]+(?:['’-][a-z]+)*/gi) ?? []
+  const after = fix.right.match(/[a-z]+(?:['’-][a-z]+)*/gi) ?? []
+
+  if (before.length !== after.length) return null
+
+  const changes = after.flatMap((word, index) => word.toLowerCase() === before[index]?.toLowerCase() ? [] : [{ word, mistake: before[index] ?? '' }])
+  const change = changes[0]
+
+  if (changes.length !== 1 || change === undefined || change.word.toLowerCase() !== entry.word.trim().toLowerCase()) return null
+
+  return { entry, mistake: change.mistake }
+}
+
 /** A text after fixing, and how many places changed. */
 interface Fixed {
   readonly text: string
@@ -63,9 +85,9 @@ interface Fixed {
 }
 
 /** The text with every fix applied wherever its passage occurs outside code, and how many places changed. */
-export function applyFixes(text: string, fixes: readonly Fix[]): Fixed {
+export function applyFixes(text: string, fixes: readonly Fix[], onApplied?: (fix: Fix) => void): Fixed {
   const blocked = protectedRanges(text)
-  const swaps: { start: number; end: number; right: string }[] = []
+  const swaps: { start: number; end: number; right: string; fix: Fix }[] = []
 
   for (const fix of fixes) {
     for (let index = text.indexOf(fix.wrong); index !== -1; index = text.indexOf(fix.wrong, index + fix.wrong.length)) {
@@ -73,11 +95,13 @@ export function applyFixes(text: string, fixes: readonly Fix[]): Fixed {
       const inCode = blocked.some(([from, to]) => index < to && end > from)
       const overlaps = swaps.some((swap) => index < swap.end && end > swap.start)
 
-      if (!inCode && !overlaps) swaps.push({ start: index, end, right: fix.right })
+      if (!inCode && !overlaps) swaps.push({ start: index, end, right: fix.right, fix })
     }
   }
 
   swaps.sort((a, b) => b.start - a.start)
+
+  for (const swap of swaps) onApplied?.(swap.fix)
 
   return { text: swaps.reduce((fixed, swap) => fixed.slice(0, swap.start) + swap.right + fixed.slice(swap.end), text), count: swaps.length }
 }
